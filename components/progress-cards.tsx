@@ -2150,25 +2150,13 @@ function BonusCard({
           </motion.div>
 
           {bonusData.deductions && bonusData.deductions.length > 0 ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowDeductions(!showDeductions)}
-              className="w-full bg-white/10 text-white hover:bg-white/20 border-white/20 backdrop-blur-sm group"
-            >
-              {showDeductions ? "Ocultar deducciones" : `Ver deducciones (${bonusData.deductions.length})`}
-              <motion.div animate={{ rotate: showDeductions ? 180 : 0 }} transition={{ duration: 0.3 }}>
-                <ChevronDown className="h-4 w-4 ml-1" />
-              </motion.div>
-            </Button>
-          ) : (
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-sm border border-white/10 text-center">
               <div className="flex items-center justify-center">
-                <CheckCircle2 className="h-4 w-4 mr-2 text-green-300" />
-                <span>Sin deducciones - Bono completo</span>
+              <CheckCircle2 className="h-4 w-4 mr-2 text-green-300" />
+              <span>Sin deducciones - Bono completo</span>
               </div>
             </div>
-          )}
+          ) : null}
 
           <AnimatePresence>
             {showDeductions && bonusData.deductions && bonusData.deductions.length > 0 && (

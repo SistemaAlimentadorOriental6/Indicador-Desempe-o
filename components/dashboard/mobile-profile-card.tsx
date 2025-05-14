@@ -16,7 +16,6 @@ import {
   Shield,
   LogOut,
   Zap,
-  Check,
   Sparkles,
   Leaf,
   Activity,
@@ -159,8 +158,87 @@ export default function MobileProfileCard({
   }, [profileData, isLoading, error, user?.cedula])
 
   // Calcular la categoría del usuario basada en métricas
-  const bonusPercentage = healthMetrics?.bonusPercentage || 96
-  const kmPercentage = healthMetrics?.kmPercentage || 92
+  const [bonusPercentage, setBonusPercentage] = useState(0)
+  const [kmPercentage, setKmPercentage] = useState(0)
+  const [lastMonthInfo, setLastMonthInfo] = useState({
+    month: "",
+    year: 0,
+  })
+
+  // Efecto para cargar los datos del último mes
+  useEffect(() => {
+    // Función para obtener los datos del último mes
+    const fetchLastMonthData = async () => {
+      try {
+        if (user?.cedula) {
+          // Obtener datos de bonos
+          const bonusResponse = await fetch(`/api/get-base-bonus-for-year?codigo=${user.cedula}`)
+          const bonusData = await bonusResponse.json()
+
+          // Obtener datos de kilometraje
+          const kmsResponse = await fetch(`/api/data-repository?codigo=${user.cedula}`)
+          const kmsData = await kmsResponse.json()
+
+          // Usar datos del último mes de bonos
+          if (bonusData.success && bonusData.lastMonthData) {
+            const bonusValue = bonusData.lastMonthData.finalValue
+            const bonusBase = bonusData.lastMonthData.bonusValue
+            // Calcular porcentaje: (valor final / valor base) * 100
+            const bonusPercent = bonusBase > 0 ? Math.round((bonusValue / bonusBase) * 100) : 0
+
+            setBonusPercentage(bonusPercent)
+            setLastMonthInfo({
+              month: bonusData.lastMonthData.monthName,
+              year: bonusData.lastMonthData.year,
+            })
+
+            console.log("Datos de bono cargados:", {
+              bonusBase,
+              bonusValue,
+              bonusPercent,
+              month: bonusData.lastMonthData.monthName,
+              year: bonusData.lastMonthData.year,
+            })
+          }
+
+          // Usar datos del último mes de kilometraje
+          if (kmsData.success && kmsData.data && kmsData.data.length > 0) {
+            // Obtener el registro más reciente (los datos vienen ordenados por fecha DESC)
+            const lastKmsData = kmsData.data[0]
+            const kmsProgValue = Number.parseFloat(lastKmsData.valor_programacion) || 0
+            const kmsExecValue = Number.parseFloat(lastKmsData.valor_ejecucion) || 0
+
+            // Calcular porcentaje: (valor ejecutado / valor programado) * 100
+            const kmsPercent = kmsProgValue > 0 ? Math.round((kmsExecValue / kmsProgValue) * 100) : 0
+
+            setKmPercentage(kmsPercent)
+            console.log("Datos de kilometraje cargados:", {
+              kmsProgValue,
+              kmsExecValue,
+              kmsPercent,
+              month: lastKmsData.monthName,
+              year: lastKmsData.year,
+            })
+          }
+        } else if (healthMetrics) {
+          // Fallback a los datos proporcionados por props si no hay cédula
+          console.log("Usando datos de props healthMetrics")
+          setBonusPercentage(healthMetrics.bonusPercentage || 0)
+          setKmPercentage(healthMetrics.kmPercentage || 0)
+        }
+      } catch (error) {
+        console.error("Error al cargar datos del último mes:", error)
+        // Usar datos de props como fallback en caso de error
+        if (healthMetrics) {
+          setBonusPercentage(healthMetrics.bonusPercentage || 0)
+          setKmPercentage(healthMetrics.kmPercentage || 0)
+        }
+      }
+    }
+
+    fetchLastMonthData()
+  }, [user?.cedula, healthMetrics])
+
   const { finalCategory } = useUserCategory(bonusPercentage, kmPercentage)
   const isMobile = useIsMobile()
 
@@ -425,6 +503,10 @@ export default function MobileProfileCard({
 
             {/* Métricas principales */}
             <FadeInWhenVisible delay={0.5} className="mb-5">
+              <div className="text-xs text-center text-gray-500 mb-2">
+                Datos del último mes: {lastMonthInfo.month || new Date().toLocaleDateString("es-ES", { month: "long" })}{" "}
+                {lastMonthInfo.year || new Date().getFullYear()}
+              </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-gradient-to-b from-green-50 to-white border border-green-100/50 shadow-sm">
                   <CircularProgress percentage={bonusPercentage} size={50} delay={0.6} />

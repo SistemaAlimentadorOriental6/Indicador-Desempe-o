@@ -95,3 +95,32 @@ export interface Activity {
   elevation: string
   terrain: string
 }
+
+export interface HealthMetrics {
+  bonusPercentage?: number
+  kmPercentage?: number
+  lastUpdated?: string
+}
+
+export interface LastMonthData {
+  year: number
+  month: number
+  bonusValue: number
+  deductionAmount: number
+  finalValue: number
+  monthName: string
+}
+
+export interface KmsData {
+  year: number
+  month: number
+  monthName: string
+  valor_programacion: number
+  valor_ejecucion: number
+  registros: Array<{
+    valor_programacion: string
+    valor_ejecucion: string
+    month: number
+    year: number
+  }>
+}
