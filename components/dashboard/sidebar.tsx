@@ -6,10 +6,8 @@ import { useState, useEffect, useCallback, useMemo, memo, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Route,
-  Award,
   Gift,
   LogOut,
-  Star,
   ChevronRight,
   Phone,
   MessageSquare,
@@ -19,14 +17,13 @@ import {
   Home,
   Settings,
   TrendingUp,
-  ChevronDown,
   User,
-  Info,
   RefreshCw,
+  ChevronDown,
+  Calendar,
+  Clock,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useUserCategory, type CategoryLevel } from "../user-category"
-import { CategoryParticles, CategoryHalo, CategoryIcon, CategoryBadge3D, GoldenCrown } from "../category-effects"
 import LogoutConfirmation from "../logout-confirmation"
 import { useRouter } from "next/navigation"
 
@@ -60,6 +57,14 @@ interface SidebarProps {
       totalExecuted: number
       percentage: number
     }
+    lastMonthData?: {
+      year: number
+      month: number
+      monthName: string
+      valor_programacion: number
+      valor_ejecucion: number
+      percentage: number
+    }
   }
   bonusesData?: {
     summary?: {
@@ -68,10 +73,24 @@ interface SidebarProps {
       percentage: number
     }
     lastMonthData?: {
-      finalValue: number
+      year: number
+      month: number
       monthName: string
+      finalValue: number
+      bonusValue: number
+      deductionAmount: number
     }
+    baseBonus?: number
+    finalBonus?: number
+    percentage?: number
   }
+}
+
+function isMobileInit(): boolean {
+  if (typeof window !== "undefined") {
+    return window.innerWidth < 1024
+  }
+  return false
 }
 
 // Optimized sidebar component with improved performance
@@ -93,10 +112,11 @@ const SidebarOptimized = memo(function SidebarOptimized({
   const [mobileOpen, setMobileOpen] = useState(false)
   const [activeSection, setActiveSection] = useState("perfil")
   const [expandedSections, setExpandedSections] = useState<string[]>(["resumen"])
-  const [isMobile, setIsMobile] = useState(false)
+  const [isMobile, setIsMobile] = useState(isMobileInit())
   const [mounted, setMounted] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
 
   // Refs to avoid unnecessary re-renders
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
@@ -106,19 +126,65 @@ const SidebarOptimized = memo(function SidebarOptimized({
 
   // Calculate percentages for categories with better error handling
   const bonusPercentage = useMemo(() => {
-    if (!bonusesData || !bonusesData.summary) return 0
-    return typeof bonusesData.summary.percentage === "number" ? bonusesData.summary.percentage : 0
+    // Determinar el año actual o el año de los datos si está disponible
+    const currentYear = bonusesData?.lastMonthData?.year || new Date().getFullYear()
+
+    // Determinar el valor base del bono según el año
+    const baseBonus = currentYear >= 2025 ? 142000 : 130000
+
+    // Si tenemos el valor final del bono, calcular el porcentaje
+    if (bonusesData?.lastMonthData?.finalValue !== undefined) {
+      const finalValue = bonusesData.lastMonthData.finalValue
+      return Math.round((finalValue / baseBonus) * 100)
+    }
+
+    // Si tenemos el formato de la respuesta JSON con finalBonus
+    if (bonusesData?.finalBonus !== undefined) {
+      return Math.round((bonusesData.finalBonus / baseBonus) * 100)
+    }
+
+    // Si tenemos datos de resumen con porcentaje
+    if (bonusesData?.summary?.percentage !== undefined) {
+      return bonusesData.summary.percentage
+    }
+
+    // Si tenemos datos de resumen con valores programados y ejecutados
+    if (bonusesData?.summary?.totalProgrammed && bonusesData?.summary?.totalExecuted) {
+      const programmed = Number(bonusesData.summary.totalProgrammed)
+      const executed = Number(bonusesData.summary.totalExecuted)
+      return programmed > 0 ? Math.round((executed / programmed) * 100) : 0
+    }
+
+    // Si tenemos el porcentaje directamente en bonusesData
+    if (bonusesData?.percentage !== undefined) {
+      return typeof bonusesData.percentage === "number" ? bonusesData.percentage : 0
+    }
+
+    return 0
   }, [bonusesData])
 
   const kmPercentage = useMemo(() => {
-    if (!kilometersData || !kilometersData.summary) return 0
-    return typeof kilometersData.summary.percentage === "number" ? kilometersData.summary.percentage : 0
+    // First check if we have data in the lastMonthData
+    if (kilometersData?.lastMonthData?.percentage !== undefined) {
+      return kilometersData.lastMonthData.percentage
+    }
+
+    // Then check if we have it in the summary
+    if (kilometersData?.summary?.percentage !== undefined) {
+      return kilometersData.summary.percentage
+    }
+
+    // Calculate manually if we have the necessary values
+    if (kilometersData?.summary?.totalProgrammed && kilometersData.summary.totalExecuted) {
+      const programmed = Number(kilometersData.summary.totalProgrammed)
+      const executed = Number(kilometersData.summary.totalExecuted)
+      return programmed > 0 ? Math.round((executed / programmed) * 100) : 0
+    }
+
+    return 0
   }, [kilometersData])
 
-  // Get user category
-  const { finalCategory } = useUserCategory(bonusPercentage, kmPercentage)
-
-  // Handle data refresh
+  // Improved refreshData function that works with the original API routes
   const refreshData = useCallback(async () => {
     if (!user?.codigo || isRefreshing) return
 
@@ -128,27 +194,68 @@ const SidebarOptimized = memo(function SidebarOptimized({
       // Clear cache by adding a timestamp to the URL
       const timestamp = new Date().getTime()
 
-      // Fetch fresh data
-      const [kmResponse, bonusResponse] = await Promise.all([
-        fetch(`/api/user/kilometers?codigo=${user.codigo}&_t=${timestamp}`),
-        fetch(`/api/user/bonuses?codigo=${user.codigo}&_t=${timestamp}`),
-      ])
+      // Fetch fresh data for kilometers and bonuses using the original routes
+      const kmUrl = `/api/user/kilometers?codigo=${user.codigo}&_t=${timestamp}`
+      const bonusUrl = `/api/user/bonuses?codigo=${user.codigo}&_t=${timestamp}`
 
-      if (kmResponse.ok && bonusResponse.ok) {
-        // Clear sessionStorage cache
-        sessionStorage.removeItem(`km-data-${user.codigo}`)
-        sessionStorage.removeItem(`bonus-data-${user.codigo}`)
-        sessionStorage.removeItem(`data-timestamp-${user.codigo}`)
+      console.log("Fetching data from:", kmUrl, bonusUrl)
 
-        // Force reload the page to refresh all data
-        window.location.reload()
+      const [kmResponse, bonusResponse] = await Promise.all([fetch(kmUrl), fetch(bonusUrl)])
+
+      // Check if responses are successful
+      if (!kmResponse.ok) {
+        const errorText = await kmResponse.text()
+        console.error("Kilometers API response error:", kmResponse.status, errorText)
+        throw new Error(`Error del servidor (km): ${kmResponse.status} ${kmResponse.statusText}`)
       }
+
+      if (!bonusResponse.ok) {
+        const errorText = await bonusResponse.text()
+        console.error("Bonuses API response error:", bonusResponse.status, errorText)
+        throw new Error(`Error del servidor (bonos): ${bonusResponse.status} ${bonusResponse.statusText}`)
+      }
+
+      // Parse responses as JSON
+      let kmData, bonusData
+      try {
+        kmData = await kmResponse.json()
+        bonusData = await bonusResponse.json()
+      } catch (parseError) {
+        console.error("JSON parse error:", parseError)
+        throw new Error("Error al procesar la respuesta del servidor. La respuesta no es un JSON válido.")
+      }
+
+      // Store the timestamp of the last refresh
+      const refreshTime = new Date()
+      setLastRefreshTime(refreshTime)
+      sessionStorage.setItem(`data-timestamp-${user.codigo}`, refreshTime.getTime().toString())
+
+      // Store the data in sessionStorage
+      sessionStorage.setItem(`km-data-${user.codigo}`, JSON.stringify(kmData))
+      sessionStorage.setItem(`bonus-data-${user.codigo}`, JSON.stringify(bonusData))
+
+      // Force reload the page to refresh all data with the new sessionStorage values
+      window.location.reload()
     } catch (error) {
       console.error("Error refreshing data:", error)
+      alert(`Error al actualizar datos: ${error instanceof Error ? error.message : "Error desconocido"}`)
     } finally {
       setIsRefreshing(false)
     }
   }, [user?.codigo, isRefreshing])
+
+  // Load data from sessionStorage on component mount
+  useEffect(() => {
+    if (user?.codigo && typeof window !== "undefined") {
+      // Try to load data from sessionStorage first
+      const timestampStr = sessionStorage.getItem(`data-timestamp-${user.codigo}`)
+
+      // Set last refresh time if available
+      if (timestampStr) {
+        setLastRefreshTime(new Date(Number(timestampStr)))
+      }
+    }
+  }, [user?.codigo])
 
   // SEO optimization with structured data - only execute once
   useEffect(() => {
@@ -344,7 +451,6 @@ const SidebarOptimized = memo(function SidebarOptimized({
                       handleImageError={handleImageError}
                       openProfile={openProfile}
                       collapsed={collapsed}
-                      category={finalCategory}
                       bonusPercentage={bonusPercentage}
                       kmPercentage={kmPercentage}
                     />
@@ -371,6 +477,9 @@ const SidebarOptimized = memo(function SidebarOptimized({
                         onLogoutClick={() => setShowLogoutConfirm(true)}
                         refreshData={refreshData}
                         isRefreshing={isRefreshing}
+                        bonusesData={bonusesData}
+                        user={user}
+                        lastRefreshTime={lastRefreshTime}
                       />
                     </div>
                   </div>
@@ -400,9 +509,10 @@ const SidebarOptimized = memo(function SidebarOptimized({
       formatCurrency,
       bonusPercentage,
       kmPercentage,
-      finalCategory,
       refreshData,
       isRefreshing,
+      bonusesData,
+      lastRefreshTime,
     ],
   )
 
@@ -422,6 +532,16 @@ const SidebarOptimized = memo(function SidebarOptimized({
     <SidebarContainer>
       <div ref={sidebarRef} className={cn("sticky top-8 transform-gpu", collapsed ? "px-2" : "")}>
         {/* Collapse toggle button (desktop only) */}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="absolute -right-3 top-12 z-20 hidden lg:flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-md border border-green-100 text-green-600 hover:text-green-700 hover:bg-green-50 transition-colors"
+          aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
+        >
+          <ChevronRight
+            className={cn("h-4 w-4 transition-transform", collapsed ? "rotate-180" : "")}
+            aria-hidden="true"
+          />
+        </button>
 
         {/* Main container with full height and scroll */}
         <div className="bg-white/90 backdrop-blur-lg rounded-3xl shadow-xl overflow-hidden border border-green-100 mb-6 flex flex-col h-[calc(100vh-6rem)] will-change-transform transform-gpu">
@@ -433,7 +553,6 @@ const SidebarOptimized = memo(function SidebarOptimized({
               handleImageError={handleImageError}
               openProfile={openProfile}
               collapsed={collapsed}
-              category={finalCategory}
               bonusPercentage={bonusPercentage}
               kmPercentage={kmPercentage}
             />
@@ -459,6 +578,10 @@ const SidebarOptimized = memo(function SidebarOptimized({
                 onLogoutClick={() => setShowLogoutConfirm(true)}
                 refreshData={refreshData}
                 isRefreshing={isRefreshing}
+                bonusesData={bonusesData}
+                user={user}
+                lastRefreshTime={lastRefreshTime}
+                upcomingActivities={upcomingActivities}
               />
             </div>
           </div>
@@ -507,14 +630,13 @@ const SidebarOptimized = memo(function SidebarOptimized({
   )
 })
 
-// Modified ProfileHeader component for a more creative design
+// Modified ProfileHeader component with category elements removed
 const ProfileHeader = memo(function ProfileHeader({
   user,
   profileImageUrl,
   handleImageError,
   openProfile,
   collapsed,
-  category,
   bonusPercentage,
   kmPercentage,
 }: {
@@ -523,23 +645,42 @@ const ProfileHeader = memo(function ProfileHeader({
   handleImageError: () => void
   openProfile: () => void
   collapsed: boolean
-  category: CategoryLevel
   bonusPercentage: number
   kmPercentage: number
 }) {
   const [isHovered, setIsHovered] = useState(false)
-  const showCrown = category === "Oro"
 
   return (
     <div className="bg-gradient-to-r from-green-600 via-emerald-500 to-green-500 relative overflow-hidden transform-gpu">
-      {/* Decorative elements */}
-      <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-md"></div>
-      <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4"></div>
-
-      {/* Animated background based on category */}
-      <div className="absolute inset-0 opacity-30">
-        <CategoryParticles category={category} size={collapsed ? "small" : "large"} />
+      {/* Enhanced background pattern */}
+      <div className="absolute inset-0 opacity-10">
+        <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="smallGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+              <path d="M 20 0 L 0 0 0 20" fill="none" stroke="white" strokeWidth="0.5" />
+            </pattern>
+            <pattern id="grid" width="80" height="80" patternUnits="userSpaceOnUse">
+              <rect width="80" height="80" fill="url(#smallGrid)" />
+              <path d="M 80 0 L 0 0 0 80" fill="none" stroke="white" strokeWidth="1" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#grid)" />
+        </svg>
       </div>
+
+      {/* Animated light beam */}
+      <motion.div
+        className="absolute -inset-full h-[500%] w-[100px] bg-white/20 blur-2xl transform -rotate-45 z-0"
+        animate={{
+          left: ["-100%", "200%"],
+        }}
+        transition={{
+          duration: 10,
+          repeat: Number.POSITIVE_INFINITY,
+          repeatDelay: 15,
+          ease: "easeInOut",
+        }}
+      />
 
       {/* Profile content */}
       <div className={cn("relative z-10 transform-gpu", collapsed ? "p-3" : "p-6")}>
@@ -550,117 +691,142 @@ const ProfileHeader = memo(function ProfileHeader({
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
           >
-            {/* Crown for Gold category */}
-            <GoldenCrown visible={showCrown} />
-
-            {/* Halo effects */}
-            <CategoryHalo category={category} size={collapsed ? "small" : "large"} />
-
-            {/* Decorative animated border based on category */}
+            {/* Decorative rings */}
             <motion.div
-              className={`absolute -inset-1 rounded-full opacity-70 z-10`}
+              className="absolute -inset-3 rounded-full opacity-70 z-0"
               style={{
                 background: `conic-gradient(
-                  ${
-                    category === "Oro"
-                      ? "#fbbf24"
-                      : category === "Plata"
-                        ? "#d1d5db"
-                        : category === "Bronce"
-                          ? "#b45309"
-                          : category === "Mejorar"
-                            ? "#22c55e"
-                            : "#f87171"
-                  },
-                  transparent 40%,
-                  transparent 60%,
-                  ${
-                    category === "Oro"
-                      ? "#fbbf24"
-                      : category === "Plata"
-                        ? "#d1d5db"
-                        : category === "Bronce"
-                          ? "#b45309"
-                          : category === "Mejorar"
-                            ? "#22c55e"
-                            : "#f87171"
-                  }
+                  from 180deg at 50% 50%,
+                  #10b981 0deg,
+                  #34d399 72deg,
+                  #6ee7b7 144deg,
+                  #a7f3d0 216deg,
+                  #10b981 288deg,
+                  #10b981 360deg
                 )`,
               }}
               animate={{ rotate: [0, 360] }}
               transition={{
-                duration: 8,
+                duration: 20,
                 repeat: Number.POSITIVE_INFINITY,
                 ease: "linear",
               }}
             />
 
-            {/* Main image container */}
-            <div className="absolute inset-1 rounded-full overflow-hidden border-4 border-white shadow-2xl z-20 transform-gpu">
-              <motion.div
-                className="w-full h-full"
-                animate={{
-                  scale: isHovered ? 1.1 : 1,
-                }}
-                transition={{
-                  duration: 0.3,
-                  ease: "easeOut",
-                }}
-              >
-                <img
-                  src={profileImageUrl || "/placeholder.svg?height=96&width=96&query=user"}
-                  alt="User profile"
-                  className="h-full w-full object-cover"
-                  onError={handleImageError}
-                  loading="lazy"
-                  decoding="async"
-                  fetchPriority="high"
-                />
-              </motion.div>
-            </div>
+            <motion.div
+              className="absolute -inset-1.5 rounded-full opacity-80 z-0"
+              style={{
+                background: `conic-gradient(
+                  from 0deg at 50% 50%,
+                  #059669 0deg,
+                  #10b981 72deg,
+                  #34d399 144deg,
+                  #6ee7b7 216deg,
+                  #059669 288deg,
+                  #059669 360deg
+                )`,
+              }}
+              animate={{ rotate: [360, 0] }}
+              transition={{
+                duration: 15,
+                repeat: Number.POSITIVE_INFINITY,
+                ease: "linear",
+              }}
+            />
 
-            {/* Container for image and effects */}
+            {/* Pulse effect */}
+            <motion.div
+              className="absolute -inset-6 rounded-full z-0 opacity-0"
+              animate={{
+                scale: [1, 1.2, 1],
+                opacity: [0, 0.1, 0],
+              }}
+              transition={{
+                duration: 2,
+                repeat: Number.POSITIVE_INFINITY,
+                repeatType: "loop",
+              }}
+              style={{
+                background: "radial-gradient(circle, rgba(16,185,129,0.7) 0%, rgba(16,185,129,0) 70%)",
+              }}
+            />
+
+            {/* Main image container with enhanced styling */}
             <div
               className={cn(
-                "rounded-full relative z-0 flex items-center justify-center transform-gpu",
+                "rounded-full relative z-10 flex items-center justify-center transform-gpu",
                 collapsed ? "h-14 w-14" : "h-24 w-24",
               )}
             >
-              {/* Space to maintain dimensions */}
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-emerald-300 to-green-600 p-0.5">
+                <div className="absolute inset-0 rounded-full overflow-hidden backdrop-blur-sm">
+                  <motion.div
+                    className="w-full h-full"
+                    animate={{
+                      scale: isHovered ? 1.1 : 1,
+                    }}
+                    transition={{
+                      duration: 0.3,
+                      ease: "easeOut",
+                    }}
+                  >
+                    <img
+                      src={profileImageUrl || "/placeholder.svg?height=96&width=96&query=user"}
+                      alt="User profile"
+                      className="h-full w-full object-cover"
+                      onError={handleImageError}
+                      loading="lazy"
+                      decoding="async"
+                      fetchPriority="high"
+                    />
+                  </motion.div>
+                </div>
+              </div>
+
+              {/* Shine effect */}
+              <motion.div
+                className="absolute inset-0 rounded-full bg-gradient-to-tr from-transparent via-white to-transparent opacity-0 z-20"
+                animate={{
+                  opacity: [0, 0.3, 0],
+                  left: ["-100%", "100%", "100%"],
+                }}
+                transition={{
+                  duration: 3,
+                  repeat: Number.POSITIVE_INFINITY,
+                  repeatDelay: 5,
+                }}
+              />
             </div>
 
-            {/* 3D category badge */}
-            <motion.div
-              className="absolute z-30 -bottom-2 -right-2"
-              animate={{
-                y: [0, -2, 0],
-                rotate: [-2, 2, -2],
-              }}
-              transition={{
-                y: {
-                  duration: 2,
-                  repeat: Number.POSITIVE_INFINITY,
-                  repeatType: "reverse",
-                },
-                rotate: {
-                  duration: 4,
-                  repeat: Number.POSITIVE_INFINITY,
-                  repeatType: "reverse",
-                },
-              }}
-            >
-              <CategoryBadge3D category={category} size={collapsed ? "small" : "medium"} showText={!collapsed} />
-            </motion.div>
-
-            {/* Interactive hover effect */}
+            {/* Interactive hover effect with improved animation */}
             <motion.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: isHovered ? 1 : 0 }}
+              animate={{ opacity: isHovered ? 0.7 : 0 }}
+              whileHover={{ opacity: 0.7 }}
               transition={{ duration: 0.2 }}
-              className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center z-50 transform-gpu"
+              className="absolute inset-0 rounded-full bg-gradient-to-br from-green-900/80 to-emerald-800/80 flex items-center justify-center z-30 transform-gpu"
             >
-              <User className={cn("text-white", collapsed ? "h-6 w-6" : "h-8 w-8")} />
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{
+                  scale: isHovered ? 1 : 0.8,
+                  opacity: isHovered ? 1 : 0,
+                }}
+                transition={{ duration: 0.2 }}
+              >
+                <User className={cn("text-white", collapsed ? "h-6 w-6" : "h-8 w-8")} />
+              </motion.div>
             </motion.div>
+
+            {/* Subtle border glow on hover */}
+            <motion.div
+              className="absolute -inset-1 rounded-full z-5 opacity-0"
+              animate={{
+                opacity: isHovered ? 0.6 : 0,
+                boxShadow: isHovered ? "0 0 15px 5px rgba(16,185,129,0.5)" : "0 0 0 0 rgba(16,185,129,0)",
+              }}
+              transition={{ duration: 0.3 }}
+            />
           </div>
         </div>
 
@@ -671,226 +837,6 @@ const ProfileHeader = memo(function ProfileHeader({
               <div className="h-0.5 w-0 group-hover:w-full bg-white/60 transition-all duration-300 mx-auto"></div>
             </h2>
             <p className="text-white/90 text-sm mt-1">{user?.rol || "Operador"}</p>
-
-            {/* Badges with 3D effect */}
-            <div className="flex justify-center mt-3 gap-2">
-              <motion.div
-                className="bg-gradient-to-br from-green-400/30 to-green-500/30 py-1 px-3 rounded-full backdrop-blur-sm inline-flex items-center border border-green-400/30"
-                whileHover={{ scale: 1.05 }}
-                style={{
-                  boxShadow: "0 3px 5px -1px rgba(0,0,0,0.1), 0 2px 3px -1px rgba(0,0,0,0.06)",
-                }}
-              >
-                <Star className="w-3.5 h-3.5 mr-1 text-green-300" fill="#86efac" />
-                <span className="text-xs text-white font-medium">Premium</span>
-              </motion.div>
-
-              {/* Category badge with glow effect */}
-              <motion.div
-                className={`py-1 px-3 rounded-full backdrop-blur-sm inline-flex items-center border transform-gpu
-                  ${
-                    category === "Oro"
-                      ? "bg-gradient-to-br from-yellow-400/30 to-amber-500/30 border-yellow-300/40"
-                      : category === "Plata"
-                        ? "bg-gradient-to-br from-gray-300/30 to-gray-500/30 border-gray-300/40"
-                        : category === "Bronce"
-                          ? "bg-gradient-to-br from-amber-600/30 to-amber-800/30 border-amber-500/40"
-                          : category === "Mejorar"
-                            ? "bg-gradient-to-br from-green-400/30 to-green-600/30 border-green-300/40"
-                            : "bg-gradient-to-br from-red-400/30 to-red-600/30 border-red-300/40"
-                  }`}
-                whileHover={{ scale: 1.05 }}
-                animate={{
-                  boxShadow: [
-                    `0 0 5px 0 ${
-                      category === "Oro"
-                        ? "rgba(251, 191, 36, 0.5)"
-                        : category === "Plata"
-                          ? "rgba(209, 213, 219, 0.5)"
-                          : category === "Bronce"
-                            ? "rgba(180, 83, 9, 0.5)"
-                            : category === "Mejorar"
-                              ? "rgba(34, 197, 94, 0.5)"
-                              : "rgba(248, 113, 113, 0.5)"
-                    }`,
-                    `0 0 10px 2px ${
-                      category === "Oro"
-                        ? "rgba(251, 191, 36, 0.3)"
-                        : category === "Plata"
-                          ? "rgba(209, 213, 219, 0.3)"
-                          : category === "Bronce"
-                            ? "rgba(180, 83, 9, 0.3)"
-                            : category === "Mejorar"
-                              ? "rgba(34, 197, 94, 0.3)"
-                              : "rgba(248, 113, 113, 0.3)"
-                    }`,
-                    `0 0 5px 0 ${
-                      category === "Oro"
-                        ? "rgba(251, 191, 36, 0.5)"
-                        : category === "Plata"
-                          ? "rgba(209, 213, 219, 0.5)"
-                          : category === "Bronce"
-                            ? "rgba(180, 83, 9, 0.5)"
-                            : category === "Mejorar"
-                              ? "rgba(34, 197, 94, 0.5)"
-                              : "rgba(248, 113, 113, 0.5)"
-                    }`,
-                  ],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Number.POSITIVE_INFINITY,
-                  repeatType: "reverse",
-                }}
-              >
-                <CategoryIcon category={category} />
-                <span className="text-xs text-white font-medium ml-1">{category}</span>
-              </motion.div>
-            </div>
-
-            {/* Enhanced info modal */}
-            <div className="mt-3 relative group">
-              <motion.button
-                className="bg-white/20 py-1 px-2 rounded-lg backdrop-blur-sm inline-flex items-center shadow-lg border border-white/30"
-                whileHover={{ scale: 1.05, y: -2 }}
-                whileTap={{ scale: 0.95 }}
-                style={{
-                  boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)",
-                }}
-              >
-                <Info className="w-3.5 h-3.5 mr-1 text-white" />
-                <span className="text-xs text-white font-medium">Detalles</span>
-              </motion.button>
-
-              <motion.div
-                className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50"
-                initial={{ opacity: 0, y: 10 }}
-                whileHover={{ opacity: 1, y: 0 }}
-              >
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-xl p-4 w-64 border border-white/40">
-                  <div className="font-bold mb-3 text-center bg-gradient-to-r from-green-600 to-emerald-500 text-white py-1.5 rounded-lg">
-                    Métricas de Rendimiento
-                  </div>
-
-                  {/* Barra de rendimiento bono */}
-                  <div className="mb-4">
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600">Bono</span>
-                      <span className="font-medium">{bonusPercentage}%</span>
-                    </div>
-                    <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
-                      <motion.div
-                        className={`h-full rounded-full ${
-                          bonusPercentage >= 100
-                            ? "bg-gradient-to-r from-yellow-400 to-yellow-500"
-                            : bonusPercentage >= 95
-                              ? "bg-gradient-to-r from-gray-400 to-gray-500"
-                              : bonusPercentage >= 90
-                                ? "bg-gradient-to-r from-amber-600 to-amber-700"
-                                : bonusPercentage >= 60
-                                  ? "bg-gradient-to-r from-green-400 to-green-500"
-                                  : "bg-gradient-to-r from-red-400 to-red-500"
-                        }`}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${bonusPercentage}%` }}
-                        transition={{ duration: 1 }}
-                      />
-                    </div>
-                    {/* Indicadores de nivel */}
-                    <div className="flex justify-between text-[10px] text-gray-500 mt-1 px-0.5">
-                      <span>|</span>
-                      <span>|</span>
-                      <span>|</span>
-                      <span>|</span>
-                      <span>|</span>
-                    </div>
-                    <div className="flex justify-between text-[10px] text-gray-500 mt-0 px-0.5">
-                      <span>60%</span>
-                      <span>90%</span>
-                      <span>95%</span>
-                      <span>100%</span>
-                      <span></span>
-                    </div>
-                  </div>
-
-                  {/* Barra de rendimiento km */}
-                  <div className="mb-4">
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600">Kilómetros</span>
-                      <span className="font-medium">{kmPercentage}%</span>
-                    </div>
-                    <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
-                      <motion.div
-                        className={`h-full rounded-full ${
-                          kmPercentage >= 94
-                            ? "bg-gradient-to-r from-yellow-400 to-yellow-500"
-                            : kmPercentage >= 90
-                              ? "bg-gradient-to-r from-gray-400 to-gray-500"
-                              : kmPercentage >= 85
-                                ? "bg-gradient-to-r from-amber-600 to-amber-700"
-                                : kmPercentage >= 70
-                                  ? "bg-gradient-to-r from-green-400 to-green-500"
-                                  : "bg-gradient-to-r from-red-400 to-red-500"
-                        }`}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${kmPercentage}%` }}
-                        transition={{ duration: 1 }}
-                      />
-                    </div>
-                    {/* Indicadores de nivel */}
-                    <div className="flex justify-between text-[10px] text-gray-500 mt-1 px-0.5">
-                      <span>|</span>
-                      <span>|</span>
-                      <span>|</span>
-                      <span>|</span>
-                      <span>|</span>
-                    </div>
-                    <div className="flex justify-between text-[10px] text-gray-500 mt-0 px-0.5">
-                      <span>70%</span>
-                      <span>85%</span>
-                      <span>90%</span>
-                      <span>94%</span>
-                      <span></span>
-                    </div>
-                  </div>
-
-                  {/* Categoría final con estilo */}
-                  <div className="pt-2 border-t border-gray-200">
-                    <div className="flex justify-between items-center font-medium">
-                      <span className="text-gray-700">Categoría Final:</span>
-                      <span
-                        className={`
-                          ${
-                            category === "Oro"
-                              ? "text-yellow-500"
-                              : category === "Plata"
-                                ? "text-gray-500"
-                                : category === "Bronce"
-                                  ? "text-amber-700"
-                                  : category === "Mejorar"
-                                    ? "text-green-500"
-                                    : "text-red-500"
-                          }`}
-                      >
-                        <CategoryBadge3D category={category} showText={true} />
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                {/* Flecha del tooltip */}
-                <motion.div
-                  className="w-4 h-4 bg-white/90 rotate-45 absolute left-1/2 -bottom-2 -translate-x-1/2 border-r border-b border-white/40"
-                  animate={{
-                    y: [0, 2, 0],
-                  }}
-                  transition={{
-                    duration: 2,
-                    repeat: Number.POSITIVE_INFINITY,
-                    repeatType: "reverse",
-                  }}
-                />
-              </motion.div>
-            </div>
           </div>
         )}
       </div>
@@ -916,6 +862,10 @@ const SidebarContent = memo(function SidebarContent({
   kmPercentage,
   refreshData,
   isRefreshing,
+  bonusesData,
+  user,
+  lastRefreshTime,
+  upcomingActivities,
 }: {
   navItems: any[]
   activeSection: string
@@ -933,15 +883,18 @@ const SidebarContent = memo(function SidebarContent({
   kmPercentage: number
   refreshData: () => void
   isRefreshing: boolean
+  bonusesData?: any
+  user?: { nombre: string; rol: string; codigo?: string }
+  lastRefreshTime: Date | null
+  upcomingActivities?: {
+    id: string
+    month: string
+    day: string
+    title: string
+    location: string
+    time: string
+  }[]
 }) {
-  // Añadir después de la declaración de SidebarContent
-  console.log("SidebarContent rendering with data:", {
-    kilometersData,
-    bonusesAvailable,
-    bonusPercentage,
-    kmPercentage,
-  })
-
   // Use IntersectionObserver to load components only when visible
   const [visibleSections, setVisibleSections] = useState<Record<string, boolean>>({
     navigation: true,
@@ -987,43 +940,105 @@ const SidebarContent = memo(function SidebarContent({
     }
   }, [])
 
-  // Get user category
-  const { finalCategory } = useUserCategory(bonusPercentage, kmPercentage)
+  // Function to determine bonus level based on percentage
+  const getBonusLevel = (percentage) => {
+    if (percentage >= 100) return "Excelente"
+    if (percentage >= 90) return "Muy Bueno"
+    if (percentage >= 80) return "Bueno"
+    if (percentage >= 70) return "Regular"
+    return "Necesita Mejorar"
+  }
 
-  // Extraer kilometros de manera más segura
+  // Improved kmValue calculation with better data source prioritization
   const kmValue = useMemo(() => {
-    if (kilometersData?.data && kilometersData.data.length > 0) {
-      return kilometersData.data[0].valor_ejecucion
+    // First check if we have data from lastMonthData
+    if (kilometersData?.lastMonthData?.valor_ejecucion) {
+      console.log("Using lastMonthData km value:", kilometersData.lastMonthData.valor_ejecucion)
+      return kilometersData.lastMonthData.valor_ejecucion
     }
-    return kilometersData?.summary?.totalExecuted || 0
+
+    // Then check if we have data array
+    if (kilometersData?.data && Array.isArray(kilometersData.data) && kilometersData.data.length > 0) {
+      // Find the first non-zero value in the data array (most recent first)
+      const nonZeroEntry = kilometersData.data.find(
+        (entry) => entry && typeof entry.valor_ejecucion === "number" && entry.valor_ejecucion > 0,
+      )
+
+      if (nonZeroEntry) {
+        console.log("Found non-zero km value:", nonZeroEntry.valor_ejecucion)
+        return nonZeroEntry.valor_ejecucion
+      }
+    }
+
+    // If no non-zero value in data array, try the summary
+    if (kilometersData?.summary?.totalExecuted && kilometersData.summary.totalExecuted > 0) {
+      console.log("Using summary km value:", kilometersData.summary.totalExecuted)
+      return kilometersData.summary.totalExecuted
+    }
+
+    // Default fallback
+    console.log("No valid km value found, using 0")
+    return 0
   }, [kilometersData])
 
-  // Extract kilometer data safely
-  // const kmValue = useMemo(() => {
-  //   // First try to get the most recent month's data
-  //   if (kilometersData?.data?.[0]?.valor_ejecucion !== undefined) {
-  //     return kilometersData.data[0].valor_ejecucion
-  //   }
+  const bonusValue = useMemo(() => {
+    // Determinar el año actual o el año de los datos si está disponible
+    const currentYear = bonusesData?.lastMonthData?.year || new Date().getFullYear()
 
-  //   // If that's not available, try the summary total
-  //   if (kilometersData?.summary?.totalExecuted !== undefined) {
-  //     return kilometersData.summary.totalExecuted
-  //   }
+    // Determinar el valor base del bono según el año
+    const baseBonus = currentYear >= 2025 ? 142000 : 130000
 
-  //   // Default fallback
-  //   return 0
-  // }, [kilometersData])
+    // First check if we have lastMonthData with a non-zero value
+    if (bonusesData?.lastMonthData?.finalValue && bonusesData.lastMonthData.finalValue > 0) {
+      console.log("Using lastMonthData bonus value:", bonusesData.lastMonthData.finalValue)
+      return bonusesData.lastMonthData.finalValue
+    }
 
-  // Añadir para mostrar valores reales
-  useEffect(() => {
-    console.log("Valores actuales:", {
-      kmValue: kilometersData?.data?.[0]?.valor_ejecucion,
-      kmSummary: kilometersData?.summary?.totalExecuted,
-      bonusValue: bonusesAvailable,
-      bonusPercentage,
-      kmPercentage,
+    // Check if we have the format from the JSON response
+    if (bonusesData?.finalBonus && bonusesData.finalBonus > 0) {
+      console.log("Using finalBonus value:", bonusesData.finalBonus)
+      return bonusesData.finalBonus
+    }
+
+    // Otherwise try the summary data
+    if (bonusesData?.summary?.totalExecuted && bonusesData.summary.totalExecuted > 0) {
+      console.log("Using summary bonus value:", bonusesData.summary.totalExecuted)
+      return bonusesData.summary.totalExecuted
+    }
+
+    // Use the provided bonusesAvailable if it's non-zero
+    if (bonusesAvailable > 0) {
+      console.log("Using bonusesAvailable:", bonusesAvailable)
+      return bonusesAvailable
+    }
+
+    // Si no hay datos, usar el valor base según el año
+    console.log("No valid bonus value found, using base value for year", currentYear, baseBonus)
+    return baseBonus
+  }, [bonusesData, bonusesAvailable])
+
+  // Format the last refresh time
+  const formattedLastRefreshTime = useMemo(() => {
+    if (!lastRefreshTime) return "Nunca"
+
+    const now = new Date()
+    const diffMs = now.getTime() - lastRefreshTime.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffHours / 24)
+
+    if (diffMins < 1) return "Hace unos segundos"
+    if (diffMins < 60) return `Hace ${diffMins} minuto${diffMins === 1 ? "" : "s"}`
+    if (diffHours < 24) return `Hace ${diffHours} hora${diffHours === 1 ? "" : "s"}`
+    if (diffDays < 7) return `Hace ${diffDays} día${diffDays === 1 ? "" : "s"}`
+
+    return lastRefreshTime.toLocaleDateString("es-ES", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
     })
-  }, [kilometersData, bonusesAvailable, bonusPercentage, kmPercentage])
+  }, [lastRefreshTime])
 
   return (
     <>
@@ -1091,36 +1106,58 @@ const SidebarContent = memo(function SidebarContent({
 
       {/* Quick stats */}
       {!collapsed && (
-        <div ref={sectionRefs.resumen} className="mt-6 pt-6 border-t border-green-100 transform-gpu">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center cursor-pointer flex-1" onClick={() => toggleSection("resumen")}>
-              <h3 className="text-sm font-medium text-gray-600 flex items-center">
-                <div className="h-1 w-4 bg-green-500 rounded-full mr-2"></div>
-                Resumen
+        <div ref={sectionRefs.resumen} className="mt-6 pt-5 border-t border-green-100 transform-gpu">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center cursor-pointer flex-1 group" onClick={() => toggleSection("resumen")}>
+              <div className="h-1.5 w-5 bg-gradient-to-r from-emerald-400 to-green-500 rounded-full mr-2 group-hover:w-6 transition-all duration-300"></div>
+              <h3 className="text-sm font-medium text-gray-700 flex items-center group-hover:text-green-600 transition-colors">
+                Resumen de Rendimiento
               </h3>
               <ChevronDown
                 className={cn(
-                  "h-4 w-4 text-gray-400 transition-transform duration-200 ml-2",
+                  "h-4 w-4 text-gray-400 transition-transform duration-300 ml-2 group-hover:text-green-500",
                   expandedSections.includes("resumen") ? "transform rotate-180" : "",
                 )}
                 aria-hidden="true"
               />
             </div>
 
-            {/* Refresh button */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={refreshData}
-              disabled={isRefreshing}
-              className={cn(
-                "p-1 rounded-md text-gray-500 hover:text-green-600 hover:bg-green-50 transition-colors",
-                isRefreshing && "animate-spin text-green-600",
-              )}
-              title="Actualizar datos"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </motion.button>
+            {/* Refresh button with enhanced animation */}
+            <div className="relative group z-10">
+              <motion.button
+                whileHover={{ scale: 1.1, rotate: isRefreshing ? 360 : 0 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={refreshData}
+                disabled={isRefreshing}
+                className={cn(
+                  "p-1.5 rounded-full text-gray-500 hover:text-white transition-all duration-300",
+                  "shadow-sm border border-green-100 hover:border-green-400 bg-white hover:bg-gradient-to-r from-green-500 to-emerald-400",
+                  isRefreshing && "animate-spin text-green-600",
+                )}
+                title="Actualizar datos"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </motion.button>
+
+              <div className="absolute bottom-full right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+                <div className="bg-gray-800 text-white text-xs py-1.5 px-3 rounded-lg shadow-lg whitespace-nowrap">
+                  {isRefreshing ? (
+                    <span className="flex items-center">
+                      <span className="inline-block h-2 w-2 rounded-full bg-green-400 mr-2 animate-pulse"></span>
+                      Actualizando datos...
+                    </span>
+                  ) : (
+                    <>
+                      Actualizar datos
+                      <div className="text-gray-300 text-[10px] mt-1 flex items-center">
+                        <span className="h-1 w-1 rounded-full bg-green-400 mr-1.5"></span>
+                        Última actualización: {formattedLastRefreshTime}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
           <AnimatePresence initial={false}>
@@ -1129,77 +1166,441 @@ const SidebarContent = memo(function SidebarContent({
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="space-y-3 overflow-hidden transform-gpu"
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                className="space-y-4 overflow-hidden transform-gpu"
               >
-                <div className="bg-gradient-to-br from-green-50/70 to-emerald-50/70 p-3 rounded-xl transition-colors duration-150 hover:from-green-50/90 hover:to-emerald-50/90 transform-gpu shadow-sm border border-green-100/50">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center">
-                      <div className="bg-green-100 p-1.5 rounded-lg mr-2">
-                        <Route className="h-4 w-4 text-green-600" />
+                {/* Kilómetros Card */}
+                <div className="relative overflow-hidden bg-white rounded-xl transition-all duration-200 hover:shadow-md shadow-sm border border-green-100 transform-gpu group">
+                  <div className="absolute right-0 top-0 h-24 w-24 bg-gradient-to-bl from-green-100/50 to-transparent rounded-bl-full"></div>
+
+                  <div className="p-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <div className="flex items-center">
+                        <div className="bg-gradient-to-br from-green-500 to-emerald-400 p-2 rounded-lg mr-3 shadow-md group-hover:shadow-lg transition-all">
+                          <Route className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-gray-800">Kilómetros</h4>
+                          <p className="text-xs text-gray-500">
+                            {kilometersData?.lastMonthData?.monthName || lastMonthName}
+                          </p>
+                        </div>
                       </div>
-                      <span className="text-xs text-gray-600">Km {lastMonthName}</span>
+                      <div className="flex items-baseline gap-1.5">
+                        {isRefreshing ? (
+                          <div className="h-6 w-20 bg-gray-200 animate-pulse rounded"></div>
+                        ) : (
+                          <>
+                            <span className="text-xl font-extrabold text-gray-800 tabular-nums group-hover:text-green-600 transition-colors">
+                              {kmValue > 0 ? kmValue.toLocaleString() : "0"}
+                            </span>
+                            <span className="text-xs text-gray-500">km</span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <span className="text-sm font-bold text-gray-800">
-                      {kilometersData?.data && kilometersData.data.length > 0
-                        ? kilometersData.data[0].valor_ejecucion.toLocaleString()
-                        : kilometersData?.summary?.totalExecuted?.toLocaleString() || "0"}
-                    </span>
+
+                    <div className="relative mt-2">
+                      <div className="w-full bg-gradient-to-r from-gray-200/80 to-gray-100/80 h-2.5 rounded-full overflow-hidden shadow-inner">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${kmPercentage}%` }}
+                          transition={{ duration: 1, ease: "easeOut" }}
+                          className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full shadow-inner relative"
+                        >
+                          {kmPercentage > 15 && (
+                            <div className="absolute inset-0 overflow-hidden">
+                              <div className="absolute inset-0 opacity-30">
+                                <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                                  <defs>
+                                    <pattern id="smallDots" width="8" height="8" patternUnits="userSpaceOnUse">
+                                      <circle cx="4" cy="4" r="1" fill="white" />
+                                    </pattern>
+                                  </defs>
+                                  <rect width="100%" height="100%" fill="url(#smallDots)" />
+                                </svg>
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      </div>
+
+                      {/* Fancy animated percentage indicator */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.5, duration: 0.3 }}
+                        className="absolute -right-1 -top-1 bg-white shadow-md rounded-md px-1.5 py-0.5 border border-green-100"
+                      >
+                        <div className="text-xs font-bold tabular-nums flex items-center">
+                          <div
+                            className={`h-1.5 w-1.5 rounded-full mr-1 ${
+                              kmPercentage >= 80 ? "bg-green-500" : kmPercentage >= 50 ? "bg-amber-500" : "bg-red-500"
+                            }`}
+                          ></div>
+                          {kmPercentage}%
+                        </div>
+                      </motion.div>
+                    </div>
+
+                    {/* Target indicators */}
+                    <div className="mt-4 flex justify-between items-center text-xs text-gray-500">
+                      <div className="flex flex-col items-center">
+                        <span className="text-xs text-gray-500">Meta</span>
+                        <span className="font-medium tabular-nums text-gray-700">
+                          {kilometersData?.summary?.totalProgrammed > 0
+                            ? kilometersData.summary.totalProgrammed.toLocaleString()
+                            : "N/A"}{" "}
+                          km
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col items-center">
+                        <span className="text-xs text-gray-500">Recorrido</span>
+                        <span className="font-medium tabular-nums text-gray-700">
+                          {kilometersData?.summary?.totalExecuted > 0
+                            ? kilometersData.summary.totalExecuted.toLocaleString()
+                            : "N/A"}{" "}
+                          km
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col items-center">
+                        <span className="text-xs text-gray-500">Nivel</span>
+                        <span
+                          className={`font-medium ${
+                            kmPercentage >= 90
+                              ? "text-green-600"
+                              : kmPercentage >= 70
+                                ? "text-amber-600"
+                                : "text-red-600"
+                          }`}
+                        >
+                          {kmPercentage >= 90
+                            ? "Excelente"
+                            : kmPercentage >= 80
+                              ? "Muy bueno"
+                              : kmPercentage >= 70
+                                ? "Bueno"
+                                : kmPercentage >= 50
+                                  ? "Regular"
+                                  : "Bajo"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="mt-2 w-full bg-green-200/50 h-2 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${kmPercentage}%` }}
-                      transition={{ duration: 0.8 }}
-                      className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full shadow-inner"
-                    />
-                  </div>
-                  <div className="mt-1 text-xs text-right text-gray-500 font-medium">{kmPercentage}%</div>
                 </div>
 
-                <div className="bg-gradient-to-br from-green-50/70 to-emerald-50/70 p-3 rounded-xl transition-colors duration-150 hover:from-green-50/90 hover:to-emerald-50/90 transform-gpu shadow-sm border border-green-100/50">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center">
-                      <div className="bg-green-100 p-1.5 rounded-lg mr-2">
-                        <Award className="h-4 w-4 text-green-600" />
+                {/* Rendimiento Global Card - Circular progress with animation */}
+                <div className="relative overflow-hidden bg-white rounded-xl transition-all duration-200 hover:shadow-md shadow-sm border border-green-100 transform-gpu">
+                  <div className="absolute right-0 top-0 h-24 w-24 bg-gradient-to-bl from-green-100/50 to-transparent rounded-bl-full"></div>
+
+                  <div className="p-4">
+                    <div className="flex items-center mb-3">
+                      <div className="bg-gradient-to-br from-emerald-500 to-teal-400 p-2 rounded-lg mr-3 shadow-md">
+                        <TrendingUp className="h-5 w-5 text-white" />
                       </div>
-                      <span className="text-xs text-gray-600">Nivel</span>
+                      <div>
+                        <h4 className="text-sm font-bold text-gray-800">Rendimiento Global</h4>
+                        <p className="text-xs text-gray-500">Métricas combinadas</p>
+                      </div>
                     </div>
-                    <div className="flex items-center">
-                      <div className="h-2 w-2 rounded-full bg-green-500 mr-1.5 animate-pulse"></div>
-                      <span className="text-sm font-bold text-gray-800">
-                        <CategoryBadge3D category={finalCategory} size="small" />
-                      </span>
+
+                    <div className="flex justify-between items-center gap-2">
+                      {/* Circular indicator for overall performance */}
+                      <div className="flex-shrink-0 relative h-20 w-20">
+                        <svg className="w-full h-full" viewBox="0 0 100 100">
+                          {/* Background circle */}
+                          <circle cx="50" cy="50" r="45" fill="none" stroke="#f3f4f6" strokeWidth="8" />
+
+                          {/* Progress circle - animated */}
+                          <motion.circle
+                            cx="50"
+                            cy="50"
+                            r="45"
+                            fill="none"
+                            stroke="url(#circleGradient)"
+                            strokeWidth="8"
+                            strokeLinecap="round"
+                            strokeDasharray="283"
+                            initial={{ strokeDashoffset: 283 }}
+                            animate={{
+                              strokeDashoffset: 283 - (283 * ((bonusPercentage + kmPercentage) / 2)) / 100,
+                            }}
+                            transition={{ duration: 1.5, ease: "easeOut" }}
+                            transform="rotate(-90, 50, 50)"
+                          />
+
+                          {/* Gradient definition */}
+                          <defs>
+                            <linearGradient id="circleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#10b981" />
+                              <stop offset="100%" stopColor="#34d399" />
+                            </linearGradient>
+                          </defs>
+                        </svg>
+
+                        {/* Center percentage */}
+                        <div className="absolute inset-0 flex items-center justify-center flex-col">
+                          <span className="text-lg font-bold text-gray-800 tabular-nums">
+                            {Math.round((bonusPercentage + kmPercentage) / 2)}%
+                          </span>
+                          <span className="text-[10px] text-gray-500">promedio</span>
+                        </div>
+                      </div>
+
+                      {/* Split metric breakdown */}
+                      <div className="flex-1 space-y-3">
+                        {/* KM Metric */}
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-medium text-gray-600 flex items-center">
+                              <Route className="h-3 w-3 mr-1 text-green-500" />
+                              Kilómetros
+                            </span>
+                            <span className="text-xs font-bold tabular-nums text-gray-700">{kmPercentage}%</span>
+                          </div>
+                          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${kmPercentage}%` }}
+                              transition={{ duration: 0.8 }}
+                              className={`h-full rounded-full ${
+                                kmPercentage >= 80 ? "bg-green-500" : kmPercentage >= 60 ? "bg-amber-500" : "bg-red-500"
+                              }`}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Bonus Metric */}
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-medium text-gray-600 flex items-center">
+                              <Gift className="h-3 w-3 mr-1 text-green-500" />
+                              Bonificación
+                            </span>
+                            <span className="text-xs font-bold tabular-nums text-gray-700">{bonusPercentage}%</span>
+                          </div>
+                          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${bonusPercentage}%` }}
+                              transition={{ duration: 0.8 }}
+                              className={`h-full rounded-full ${
+                                bonusPercentage >= 80
+                                  ? "bg-green-500"
+                                  : bonusPercentage >= 60
+                                    ? "bg-amber-500"
+                                    : "bg-red-500"
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-2 flex items-center text-xs text-gray-500">
-                    <TrendingUp className="h-3 w-3 mr-1 text-green-500" />
-                    <span>
-                      Bono: {bonusPercentage}% | KM: {kmPercentage}%
-                    </span>
+
+                    {/* Performance evaluation with badge */}
+                    <div className="mt-3 flex justify-end">
+                      <div
+                        className={`
+                          text-xs px-2.5 py-1 rounded-full font-medium
+                          ${
+                            (bonusPercentage + kmPercentage) / 2 >= 90
+                              ? "bg-green-100 text-green-700 border border-green-200"
+                              : (bonusPercentage + kmPercentage) / 2 >= 70
+                                ? "bg-amber-100 text-amber-700 border border-amber-200"
+                                : "bg-red-100 text-red-700 border border-red-200"
+                          }
+                        `}
+                      >
+                        {(bonusPercentage + kmPercentage) / 2 >= 90
+                          ? "Rendimiento Excepcional"
+                          : (bonusPercentage + kmPercentage) / 2 >= 80
+                            ? "Muy Buen Rendimiento"
+                            : (bonusPercentage + kmPercentage) / 2 >= 70
+                              ? "Buen Rendimiento"
+                              : (bonusPercentage + kmPercentage) / 2 >= 60
+                                ? "Rendimiento Regular"
+                                : "Necesita Mejorar"}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-br from-green-50/70 to-emerald-50/70 p-3 rounded-xl transition-colors duration-150 hover:from-green-50/90 hover:to-emerald-50/90 transform-gpu shadow-sm border border-green-100/50">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center">
-                      <div className="bg-green-100 p-1.5 rounded-lg mr-2">
-                        <Gift className="h-4 w-4 text-green-600" />
+                {/* Bonificación Card with animated bars */}
+                <div className="relative overflow-hidden bg-white rounded-xl transition-all duration-200 hover:shadow-md shadow-sm border border-green-100 transform-gpu group">
+                  <div className="absolute right-0 top-0 h-24 w-24 bg-gradient-to-bl from-green-100/50 to-transparent rounded-bl-full"></div>
+
+                  <div className="p-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <div className="flex items-center">
+                        <div className="bg-gradient-to-br from-green-500 to-emerald-400 p-2 rounded-lg mr-3 shadow-md group-hover:shadow-lg transition-all">
+                          <Gift className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-gray-800">Bonificación</h4>
+                          <p className="text-xs text-gray-500">
+                            {bonusesData?.lastMonthData?.monthName || lastMonthName}
+                          </p>
+                        </div>
                       </div>
-                      <span className="text-xs text-gray-600">Bono {lastMonthName}</span>
+                      <div className="flex items-baseline gap-1">
+                        {isRefreshing ? (
+                          <div className="h-6 w-24 bg-gray-200 animate-pulse rounded"></div>
+                        ) : (
+                          <span className="text-xl font-extrabold text-gray-800 tabular-nums group-hover:text-green-600 transition-colors">
+                            {bonusValue > 0 ? formatCurrency(bonusValue) : "$0"}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <span className="text-sm font-bold text-gray-800">{formatCurrency(bonusesAvailable || 0)}</span>
+
+                    <div className="relative mt-2">
+                      <div className="w-full bg-gradient-to-r from-gray-200/80 to-gray-100/80 h-2.5 rounded-full overflow-hidden shadow-inner">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${bonusPercentage}%` }}
+                          transition={{ duration: 1, ease: "easeOut" }}
+                          className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full shadow-inner"
+                        >
+                          {/* Pattern overlay for visual interest */}
+                          {bonusPercentage > 15 && (
+                            <div className="absolute inset-0 overflow-hidden">
+                              <div className="absolute inset-0 opacity-30">
+                                <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                                  <defs>
+                                    <pattern id="smallDashes" width="10" height="10" patternUnits="userSpaceOnUse">
+                                      <path d="M0,5 L10,5" stroke="white" strokeWidth="2" strokeDasharray="2,2" />
+                                    </pattern>
+                                  </defs>
+                                  <rect width="100%" height="100%" fill="url(#smallDashes)" />
+                                </svg>
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      </div>
+
+                      {/* Fancy animated percentage indicator */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.5, duration: 0.3 }}
+                        className="absolute -right-1 -top-1 bg-white shadow-md rounded-md px-1.5 py-0.5 border border-green-100"
+                      >
+                        <div className="text-xs font-bold tabular-nums flex items-center">
+                          <div
+                            className={`h-1.5 w-1.5 rounded-full mr-1 ${bonusPercentage >= 80 ? "bg-green-500" : bonusPercentage >= 50 ? "bg-amber-500" : "bg-red-500"}`}
+                          ></div>
+                          {bonusPercentage}%
+                        </div>
+                      </motion.div>
+                    </div>
+
+                    {/* Información detallada del bono */}
+                    <div className="mt-4 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <div className="text-gray-500 dark:text-gray-400">Base</div>
+                          <div className="font-medium text-gray-800 dark:text-gray-200">
+                            {formatCurrency(bonusesData?.lastMonthData?.year >= 2025 ? 142000 : 130000)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500 dark:text-gray-400">Final</div>
+                          <div className="font-medium text-gray-800 dark:text-gray-200">
+                            {formatCurrency(bonusValue)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500 dark:text-gray-400">Porcentaje</div>
+                          <div className="font-medium text-gray-800 dark:text-gray-200">{bonusPercentage}%</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Comparison with previous periods */}
+                    <div className="mt-4">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs text-gray-600">Nivel de Desempeño:</span>
+                        <span
+                          className={`text-xs font-medium ${
+                            bonusPercentage >= 90
+                              ? "text-green-600"
+                              : bonusPercentage >= 70
+                                ? "text-amber-600"
+                                : "text-red-600"
+                          }`}
+                        >
+                          {getBonusLevel(bonusPercentage)}
+                        </span>
+                      </div>
+
+                      {/* Compare base vs final bonus if available */}
+                      {bonusesData?.baseBonus && bonusesData?.finalBonus && (
+                        <div className="mt-2 p-2 bg-gray-50 rounded-lg border border-gray-100">
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <div className="text-gray-500">Base</div>
+                              <div className="font-medium text-gray-800">{formatCurrency(bonusesData.baseBonus)}</div>
+                            </div>
+                            <div>
+                              <div className="text-gray-500">Final</div>
+                              <div className="font-medium text-gray-800">{formatCurrency(bonusesData.finalBonus)}</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Last updated timestamp */}
+                      <div className="mt-3 flex items-center justify-end text-xs text-gray-500">
+                        <Clock className="h-3 w-3 mr-1" />
+                        <span>Actualizado: {formattedLastRefreshTime}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="mt-2 w-full bg-green-200/50 h-2 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${bonusPercentage}%` }}
-                      transition={{ duration: 0.8 }}
-                      className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full shadow-inner"
-                    />
-                  </div>
-                  <div className="mt-1 text-xs text-right text-gray-500 font-medium">{bonusPercentage}%</div>
                 </div>
+
+                {/* Upcoming activities or calendar preview */}
+                {upcomingActivities && upcomingActivities.length > 0 && (
+                  <div className="relative overflow-hidden bg-white rounded-xl transition-all duration-200 hover:shadow-md shadow-sm border border-green-100 transform-gpu">
+                    <div className="p-4">
+                      <div className="flex items-center mb-3">
+                        <div className="bg-gradient-to-br from-blue-500 to-indigo-400 p-2 rounded-lg mr-3 shadow-md">
+                          <Calendar className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-gray-800">Próximas Actividades</h4>
+                          <p className="text-xs text-gray-500">Calendario</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 mt-2">
+                        {upcomingActivities.slice(0, 2).map((activity) => (
+                          <div
+                            key={activity.id}
+                            className="flex items-start p-2 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex-shrink-0 bg-blue-100 rounded-md p-1.5 text-center mr-3 w-10">
+                              <div className="text-[10px] text-blue-600 uppercase font-bold">{activity.month}</div>
+                              <div className="text-sm font-bold text-blue-700">{activity.day}</div>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-800 truncate">{activity.title}</p>
+                              <div className="flex items-center mt-1 text-[10px] text-gray-500">
+                                <div className="flex items-center mr-2">
+                                  <Clock className="h-2.5 w-2.5 mr-0.5" />
+                                  <span>{activity.time}</span>
+                                </div>
+                                <span className="truncate">{activity.location}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
