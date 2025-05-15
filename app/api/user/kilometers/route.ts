@@ -1,32 +1,31 @@
-
 import { NextResponse } from "next/server"
-import { createConnection } from "mysql2/promise"
+import { createPool } from "mysql2/promise"
 import NodeCache from "node-cache"
 
 const cache = new NodeCache({ stdTTL: 300 }) // 5 minutos de caché
 
-const dbConfig = {
+// Configuración del pool de conexiones
+const pool = createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
-}
+  waitForConnections: true,
+  connectionLimit: 15,
+  idleTimeout: 30000, // 30 segundos de inactividad
+  queueLimit: 0
+})
 
 class DataRepository {
-  private connection: any
-  
-  async connect() {
-    if (!this.connection) {
-      this.connection = await createConnection(dbConfig)
-    }
-    return this.connection
-  }
-
-  async close() {
-    if (this.connection) {
-      await this.connection.end()
-      this.connection = null
+  // Método genérico para ejecutar consultas
+  private async executeQuery<T>(query: string, params: any[] = []): Promise<T> {
+    const connection = await pool.getConnection()
+    try {
+      const [rows] = await connection.execute(query, params)
+      return rows as T
+    } finally {
+      connection.release()
     }
   }
 
@@ -35,8 +34,6 @@ class DataRepository {
     year?: number
     month?: number
   }) {
-    await this.connect()
-    
     let query = `
       SELECT 
         vc.codigo_variable,
@@ -91,12 +88,10 @@ class DataRepository {
 
     query += " ORDER BY months.month_date DESC"
 
-    const [rows] = await this.connection.execute(query, queryParams)
-    return rows
+    return this.executeQuery<any[]>(query, queryParams)
   }
 
   async getAvailableYears(userCode?: string) {
-    await this.connect()
     const query = `
       SELECT DISTINCT YEAR(fecha_inicio_programacion) as year 
       FROM variables_control
@@ -104,12 +99,14 @@ class DataRepository {
       ${userCode && userCode !== 'all' ? "AND codigo_empleado = ?" : ""}
       ORDER BY year DESC
     `
-    const [rows] = await this.connection.execute(query, userCode && userCode !== 'all' ? [userCode] : [])
-    return rows.map((r: any) => r.year).filter((y: number) => y !== null)
+    const result = await this.executeQuery<{ year: number }[]>(
+      query, 
+      userCode && userCode !== 'all' ? [userCode] : []
+    )
+    return result.map(r => r.year).filter(y => y !== null)
   }
 
   async getAvailableMonths(userCode?: string, year?: number) {
-    await this.connect()
     const query = `
       SELECT DISTINCT MONTH(fecha_inicio_programacion) as month 
       FROM variables_control
@@ -122,8 +119,8 @@ class DataRepository {
     if (userCode && userCode !== 'all') params.push(userCode)
     if (year) params.push(year)
     
-    const [rows] = await this.connection.execute(query, params)
-    return rows.map((r: any) => r.month).filter((m: number) => m !== null)
+    const result = await this.executeQuery<{ month: number }[]>(query, params)
+    return result.map(r => r.month).filter(m => m !== null)
   }
 }
 
@@ -159,7 +156,6 @@ export async function GET(request: Request) {
   const yearParam = searchParams.get("year")
   const monthParam = searchParams.get("month")
 
-  // Validaciones básicas
   if (!userCode) {
     return NextResponse.json(
       { success: false, message: "Código de usuario requerido" },
@@ -170,13 +166,12 @@ export async function GET(request: Request) {
   const year = yearParam ? parseInt(yearParam) : undefined
   const month = monthParam ? parseInt(monthParam) : undefined
 
-  // Generar clave única para el caché
   const cacheKey = `${userCode}-${year}-${month}`
   const cached = cache.get(cacheKey)
   if (cached) return NextResponse.json(cached)
 
-  const repo = new DataRepository()
   try {
+    const repo = new DataRepository()
     const [rawData, years, months] = await Promise.all([
       repo.getVariables({ userCode, year, month }),
       repo.getAvailableYears(userCode !== 'all' ? userCode : undefined),
@@ -220,8 +215,6 @@ export async function GET(request: Request) {
       },
       { status: 500 }
     )
-  } finally {
-    await repo.close()
   }
 }
 
