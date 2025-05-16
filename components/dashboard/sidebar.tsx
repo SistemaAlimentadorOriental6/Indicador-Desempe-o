@@ -26,6 +26,14 @@ import {
 import { cn } from "@/lib/utils"
 import LogoutConfirmation from "../logout-confirmation"
 import { useRouter } from "next/navigation"
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query"
+
+// Añadir declaración de tipo para window.__SIDEBAR_LOAD_TIME
+declare global {
+  interface Window {
+    __SIDEBAR_LOAD_TIME?: number
+  }
+}
 
 interface SidebarProps {
   user: { nombre: string; rol: string; codigo?: string }
@@ -86,11 +94,223 @@ interface SidebarProps {
   }
 }
 
+// Modificar la configuración del QueryClient para evitar recargas automáticas
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: Number.POSITIVE_INFINITY, // Evita que los datos se marquen como obsoletos
+      cacheTime: 24 * 60 * 60 * 1000, // 24 horas de caché
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      refetchOnReconnect: false, // Desactivar refetch al reconectar
+      retry: 1,
+    },
+  },
+})
+
+// Implementación personalizada de persistencia de caché
+if (typeof window !== "undefined") {
+  // Función para guardar el estado de la caché en localStorage
+  const saveQueryCache = () => {
+    try {
+      const queryCache = queryClient.getQueryCache().getAll()
+      const cachesToSave = queryCache
+        .filter((query) => {
+          const queryKey = JSON.stringify(query.queryKey)
+          return queryKey.includes("kilometers") || queryKey.includes("bonuses")
+        })
+        .map((query) => ({
+          queryKey: query.queryKey,
+          state: query.state,
+        }))
+
+      if (cachesToSave.length > 0) {
+        localStorage.setItem(
+          "sidebar-cache-v1",
+          JSON.stringify({
+            timestamp: Date.now(),
+            queries: cachesToSave,
+          }),
+        )
+      }
+    } catch (error) {
+      console.error("Error saving query cache:", error)
+    }
+  }
+
+  // Cargar caché guardada al iniciar
+  try {
+    const savedCache = localStorage.getItem("sidebar-cache-v1")
+    if (savedCache) {
+      const parsed = JSON.parse(savedCache)
+
+      // Verificar si los datos han expirado (24 horas)
+      const hasExpired = parsed.timestamp && Date.now() - parsed.timestamp > 24 * 60 * 60 * 1000
+
+      if (!hasExpired && parsed.queries) {
+        // Restaurar consultas guardadas
+        parsed.queries.forEach((item) => {
+          if (item.state.data) {
+            queryClient.setQueryData(item.queryKey, item.state.data)
+          }
+        })
+      }
+    }
+  } catch (error) {
+    console.error("Error loading query cache:", error)
+    // Si hay error al cargar, limpiar la caché para evitar problemas futuros
+    localStorage.removeItem("sidebar-cache-v1")
+  }
+
+  // Suscribirse a cambios en la caché para guardarlos
+  // Usar un debounce para no guardar demasiado frecuentemente
+  let saveTimeout = null
+  queryClient.getQueryCache().subscribe(() => {
+    if (saveTimeout) clearTimeout(saveTimeout)
+    saveTimeout = setTimeout(saveQueryCache, 2000) // Guardar después de 2 segundos de inactividad
+  })
+}
+
+// Modificar las funciones de API para implementar prefetching y optimistic updates
+const api = {
+  fetchKilometers: async (userCode: string) => {
+    if (!userCode) return null
+
+    // Intentar obtener datos de localStorage primero para carga instantánea
+    if (typeof window !== "undefined") {
+      try {
+        const cachedData = localStorage.getItem(`km-data-${userCode}`)
+        if (cachedData) {
+          // Devolver datos en caché inmediatamente mientras se actualiza en segundo plano
+          setTimeout(() => {
+            // Actualizar en segundo plano sin bloquear la UI
+            fetch(`/api/user/kilometers?codigo=${userCode}&_t=${Date.now()}`)
+              .then((response) => response.json())
+              .then((freshData) => {
+                localStorage.setItem(`km-data-${userCode}`, JSON.stringify(freshData))
+                queryClient.setQueryData(["kilometers", userCode], freshData)
+              })
+              .catch(console.error)
+          }, 100)
+
+          return JSON.parse(cachedData)
+        }
+      } catch (e) {
+        console.error("Error reading from cache:", e)
+      }
+    }
+
+    const url = `/api/user/kilometers?codigo=${userCode}&_t=${Date.now()}`
+
+    try {
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`Error del servidor: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      // Guardar en localStorage para acceso instantáneo en futuras visitas
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`km-data-${userCode}`, JSON.stringify(data))
+      }
+
+      return data
+    } catch (error) {
+      console.error("Error fetching kilometers data:", error)
+      throw error
+    }
+  },
+
+  fetchBonuses: async (userCode: string) => {
+    if (!userCode) return null
+
+    // Intentar obtener datos de localStorage primero para carga instantánea
+    if (typeof window !== "undefined") {
+      try {
+        const cachedData = localStorage.getItem(`bonus-data-${userCode}`)
+        if (cachedData) {
+          // Devolver datos en caché inmediatamente mientras se actualiza en segundo plano
+          setTimeout(() => {
+            // Actualizar en segundo plano sin bloquear la UI
+            fetch(`/api/user/bonuses?codigo=${userCode}&_t=${Date.now()}`)
+              .then((response) => response.json())
+              .then((freshData) => {
+                localStorage.setItem(`bonus-data-${userCode}`, JSON.stringify(freshData))
+                queryClient.setQueryData(["bonuses", userCode], freshData)
+              })
+              .catch(console.error)
+          }, 200) // Ligero retraso para no competir con la primera solicitud
+
+          return JSON.parse(cachedData)
+        }
+      } catch (e) {
+        console.error("Error reading from cache:", e)
+      }
+    }
+
+    const url = `/api/user/bonuses?codigo=${userCode}&_t=${Date.now()}`
+
+    try {
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`Error del servidor: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      // Guardar en localStorage para acceso instantáneo en futuras visitas
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`bonus-data-${userCode}`, JSON.stringify(data))
+      }
+
+      return data
+    } catch (error) {
+      console.error("Error fetching bonuses data:", error)
+      throw error
+    }
+  },
+
+  // Método para prefetch de datos
+  prefetchAll: async (userCode: string) => {
+    if (!userCode) return
+
+    await Promise.all([
+      queryClient.prefetchQuery({
+        queryKey: ["kilometers", userCode],
+        queryFn: () => api.fetchKilometers(userCode),
+      }),
+      queryClient.prefetchQuery({
+        queryKey: ["bonuses", userCode],
+        queryFn: () => api.fetchBonuses(userCode),
+      }),
+    ])
+  },
+}
+
 function isMobileInit(): boolean {
   if (typeof window !== "undefined") {
     return window.innerWidth < 1024
   }
   return false
+}
+
+// Modificar el componente SidebarOptimizedWithProvider para implementar prefetching y optimizaciones
+
+// Wrapper component with QueryClientProvider
+const SidebarOptimizedWithProvider = (props: SidebarProps) => {
+  // Prefetch data on component mount
+  useEffect(() => {
+    if (props.user?.codigo) {
+      api.prefetchAll(props.user.codigo)
+    }
+  }, [props.user?.codigo])
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <SidebarOptimized {...props} />
+    </QueryClientProvider>
+  )
 }
 
 // Optimized sidebar component with improved performance
@@ -104,8 +324,8 @@ const SidebarOptimized = memo(function SidebarOptimized({
   lastMonthName,
   healthMetrics,
   upcomingActivities,
-  kilometersData,
-  bonusesData,
+  kilometersData: initialKilometersData,
+  bonusesData: initialBonusesData,
 }: SidebarProps) {
   const router = useRouter()
   const [collapsed, setCollapsed] = useState(false)
@@ -115,8 +335,7 @@ const SidebarOptimized = memo(function SidebarOptimized({
   const [isMobile, setIsMobile] = useState(isMobileInit())
   const [mounted, setMounted] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
+  const queryClient = useQueryClient()
 
   // Refs to avoid unnecessary re-renders
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
@@ -124,138 +343,201 @@ const SidebarOptimized = memo(function SidebarOptimized({
   const prevScrollY = useRef(0)
   const ticking = useRef(false)
 
-  // Calculate percentages for categories with better error handling
-  const bonusPercentage = useMemo(() => {
+  // Fetch kilometers data with React Query - optimizado con placeholderData
+  const {
+    data: kilometersData,
+    isLoading: isLoadingKilometers,
+    error: kilometersError,
+    refetch: refetchKilometers,
+    isFetching: isFetchingKilometers,
+    dataUpdatedAt: kilometersUpdatedAt,
+  } = useQuery({
+    queryKey: ["kilometers", user?.codigo],
+    queryFn: () => api.fetchKilometers(user?.codigo || ""),
+    enabled: !!user?.codigo,
+    placeholderData: initialKilometersData, // Usar datos iniciales como placeholder
+    initialData: () => {
+      // Intentar obtener datos de localStorage para carga instantánea
+      if (typeof window !== "undefined" && user?.codigo) {
+        try {
+          const cachedData = localStorage.getItem(`km-data-${user.codigo}`)
+          if (cachedData) {
+            return JSON.parse(cachedData)
+          }
+        } catch (e) {
+          console.error("Error reading from cache:", e)
+        }
+      }
+      return initialKilometersData
+    },
+  })
+
+  // Fetch bonuses data with React Query - optimizado con placeholderData
+  const {
+    data: bonusesData,
+    isLoading: isLoadingBonuses,
+    error: bonusesError,
+    refetch: refetchBonuses,
+    isFetching: isFetchingBonuses,
+    dataUpdatedAt: bonusesUpdatedAt,
+  } = useQuery({
+    queryKey: ["bonuses", user?.codigo],
+    queryFn: () => api.fetchBonuses(user?.codigo || ""),
+    enabled: !!user?.codigo,
+    placeholderData: initialBonusesData, // Usar datos iniciales como placeholder
+    initialData: () => {
+      // Intentar obtener datos de localStorage para carga instantánea
+      if (typeof window !== "undefined" && user?.codigo) {
+        try {
+          const cachedData = localStorage.getItem(`bonus-data-${user.codigo}`)
+          if (cachedData) {
+            return JSON.parse(cachedData)
+          }
+        } catch (e) {
+          console.error("Error reading from cache:", e)
+        }
+      }
+      return initialBonusesData
+    },
+  })
+
+  // Optimización: Precalcular valores derivados con useMemo para evitar cálculos repetidos
+  const { bonusPercentage, kmPercentage } = useMemo(() => {
+    // Calcular bonusPercentage
+    let bonusPerc = 0
     // Determinar el año actual o el año de los datos si está disponible
     const currentYear = bonusesData?.lastMonthData?.year || new Date().getFullYear()
-
     // Determinar el valor base del bono según el año
     const baseBonus = currentYear >= 2025 ? 142000 : 130000
 
     // Si tenemos el valor final del bono, calcular el porcentaje
     if (bonusesData?.lastMonthData?.finalValue !== undefined) {
       const finalValue = bonusesData.lastMonthData.finalValue
-      return Math.round((finalValue / baseBonus) * 100)
-    }
-
-    // Si tenemos el formato de la respuesta JSON con finalBonus
-    if (bonusesData?.finalBonus !== undefined) {
-      return Math.round((bonusesData.finalBonus / baseBonus) * 100)
-    }
-
-    // Si tenemos datos de resumen con porcentaje
-    if (bonusesData?.summary?.percentage !== undefined) {
-      return bonusesData.summary.percentage
-    }
-
-    // Si tenemos datos de resumen con valores programados y ejecutados
-    if (bonusesData?.summary?.totalProgrammed && bonusesData?.summary?.totalExecuted) {
+      bonusPerc = Math.round((finalValue / baseBonus) * 100)
+    } else if (bonusesData?.finalBonus !== undefined) {
+      bonusPerc = Math.round((bonusesData.finalBonus / baseBonus) * 100)
+    } else if (bonusesData?.summary?.percentage !== undefined) {
+      bonusPerc = bonusesData.summary.percentage
+    } else if (bonusesData?.summary?.totalProgrammed && bonusesData?.summary?.totalExecuted) {
       const programmed = Number(bonusesData.summary.totalProgrammed)
       const executed = Number(bonusesData.summary.totalExecuted)
-      return programmed > 0 ? Math.round((executed / programmed) * 100) : 0
+      bonusPerc = programmed > 0 ? Math.round((executed / programmed) * 100) : 0
+    } else if (bonusesData?.percentage !== undefined) {
+      bonusPerc = typeof bonusesData.percentage === "number" ? bonusesData.percentage : 0
     }
 
-    // Si tenemos el porcentaje directamente en bonusesData
-    if (bonusesData?.percentage !== undefined) {
-      return typeof bonusesData.percentage === "number" ? bonusesData.percentage : 0
-    }
-
-    return 0
-  }, [bonusesData])
-
-  const kmPercentage = useMemo(() => {
-    // First check if we have data in the lastMonthData
+    // Calcular kmPercentage
+    let kmPerc = 0
     if (kilometersData?.lastMonthData?.percentage !== undefined) {
-      return kilometersData.lastMonthData.percentage
-    }
-
-    // Then check if we have it in the summary
-    if (kilometersData?.summary?.percentage !== undefined) {
-      return kilometersData.summary.percentage
-    }
-
-    // Calculate manually if we have the necessary values
-    if (kilometersData?.summary?.totalProgrammed && kilometersData.summary.totalExecuted) {
+      kmPerc = kilometersData.lastMonthData.percentage
+    } else if (kilometersData?.summary?.percentage !== undefined) {
+      kmPerc = kilometersData.summary.percentage
+    } else if (kilometersData?.summary?.totalProgrammed && kilometersData.summary.totalExecuted) {
       const programmed = Number(kilometersData.summary.totalProgrammed)
       const executed = Number(kilometersData.summary.totalExecuted)
-      return programmed > 0 ? Math.round((executed / programmed) * 100) : 0
+      kmPerc = programmed > 0 ? Math.round((executed / programmed) * 100) : 0
     }
 
-    return 0
-  }, [kilometersData])
+    return { bonusPercentage: bonusPerc, kmPercentage: kmPerc }
+  }, [bonusesData, kilometersData])
 
-  // Improved refreshData function that works with the original API routes
+  // Modificar la función refreshData para evitar ciclos de actualización
   const refreshData = useCallback(async () => {
-    if (!user?.codigo || isRefreshing) return
-
-    setIsRefreshing(true)
+    if (!user?.codigo || isFetchingKilometers || isFetchingBonuses || !navigator.onLine) return
 
     try {
-      // Clear cache by adding a timestamp to the URL
-      const timestamp = new Date().getTime()
+      // Obtener timestamp de la última actualización
+      const lastRefreshStr = localStorage.getItem(`last-refresh-${user.codigo}`)
+      const lastRefresh = lastRefreshStr ? Number.parseInt(lastRefreshStr, 10) : 0
 
-      // Fetch fresh data for kilometers and bonuses using the original routes
-      const kmUrl = `/api/user/kilometers?codigo=${user.codigo}&_t=${timestamp}`
-      const bonusUrl = `/api/user/bonuses?codigo=${user.codigo}&_t=${timestamp}`
-
-      console.log("Fetching data from:", kmUrl, bonusUrl)
-
-      const [kmResponse, bonusResponse] = await Promise.all([fetch(kmUrl), fetch(bonusUrl)])
-
-      // Check if responses are successful
-      if (!kmResponse.ok) {
-        const errorText = await kmResponse.text()
-        console.error("Kilometers API response error:", kmResponse.status, errorText)
-        throw new Error(`Error del servidor (km): ${kmResponse.status} ${kmResponse.statusText}`)
+      // Evitar actualizaciones demasiado frecuentes (mínimo 5 minutos entre actualizaciones)
+      if (lastRefresh && Date.now() - lastRefresh < 5 * 60 * 1000) {
+        console.log("Skipping refresh - too soon since last refresh")
+        return
       }
 
-      if (!bonusResponse.ok) {
-        const errorText = await bonusResponse.text()
-        console.error("Bonuses API response error:", bonusResponse.status, errorText)
-        throw new Error(`Error del servidor (bonos): ${bonusResponse.status} ${bonusResponse.statusText}`)
+      // Use React Query's refetch to get fresh data
+      await Promise.all([refetchKilometers({ cancelRefetch: false }), refetchBonuses({ cancelRefetch: false })])
+
+      // Actualizar timestamp en localStorage
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`last-refresh-${user.codigo}`, Date.now().toString())
       }
-
-      // Parse responses as JSON
-      let kmData, bonusData
-      try {
-        kmData = await kmResponse.json()
-        bonusData = await bonusResponse.json()
-      } catch (parseError) {
-        console.error("JSON parse error:", parseError)
-        throw new Error("Error al procesar la respuesta del servidor. La respuesta no es un JSON válido.")
-      }
-
-      // Store the timestamp of the last refresh
-      const refreshTime = new Date()
-      setLastRefreshTime(refreshTime)
-      sessionStorage.setItem(`data-timestamp-${user.codigo}`, refreshTime.getTime().toString())
-
-      // Store the data in sessionStorage
-      sessionStorage.setItem(`km-data-${user.codigo}`, JSON.stringify(kmData))
-      sessionStorage.setItem(`bonus-data-${user.codigo}`, JSON.stringify(bonusData))
-
-      // Force reload the page to refresh all data with the new sessionStorage values
-      window.location.reload()
     } catch (error) {
       console.error("Error refreshing data:", error)
-      alert(`Error al actualizar datos: ${error instanceof Error ? error.message : "Error desconocido"}`)
-    } finally {
-      setIsRefreshing(false)
+      // No mostrar alerta para mejorar UX, manejar error silenciosamente
+      console.warn(`Error al actualizar datos: ${error instanceof Error ? error.message : "Error desconocido"}`)
     }
-  }, [user?.codigo, isRefreshing])
+  }, [user?.codigo, refetchKilometers, refetchBonuses, isFetchingKilometers, isFetchingBonuses])
 
-  // Load data from sessionStorage on component mount
+  // Optimización: Cargar datos en segundo plano al montar el componente
   useEffect(() => {
-    if (user?.codigo && typeof window !== "undefined") {
-      // Try to load data from sessionStorage first
-      const timestampStr = sessionStorage.getItem(`data-timestamp-${user.codigo}`)
+    if (user?.codigo && mounted) {
+      // Verificar si ya tenemos datos en caché antes de intentar actualizar
+      const hasKilometersData = queryClient.getQueryData(["kilometers", user.codigo])
+      const hasBonusesData = queryClient.getQueryData(["bonuses", user.codigo])
 
-      // Set last refresh time if available
-      if (timestampStr) {
-        setLastRefreshTime(new Date(Number(timestampStr)))
+      // Solo actualizar si no tenemos datos o si han pasado más de 30 minutos desde la última actualización
+      const lastRefreshStr = localStorage.getItem(`last-refresh-${user.codigo}`)
+      const lastRefresh = lastRefreshStr ? Number.parseInt(lastRefreshStr, 10) : 0
+      const shouldRefresh = !lastRefresh || Date.now() - lastRefresh > 30 * 60 * 1000
+
+      if ((!hasKilometersData || !hasBonusesData || shouldRefresh) && navigator.onLine) {
+        // Pequeño retraso para priorizar la renderización inicial
+        const timer = setTimeout(() => {
+          refreshData()
+        }, 2000) // Aumentar a 2 segundos para dar más tiempo a la renderización inicial
+
+        return () => clearTimeout(timer)
       }
     }
-  }, [user?.codigo])
+  }, [user?.codigo, mounted, refreshData, queryClient])
+
+  // Añadir un mecanismo para detectar y prevenir recargas automáticas
+  useEffect(() => {
+    if (typeof window !== "undefined" && mounted) {
+      // Guardar el tiempo de carga inicial
+      if (!window.__SIDEBAR_LOAD_TIME) {
+        window.__SIDEBAR_LOAD_TIME = Date.now()
+
+        // Guardar en sessionStorage para persistir entre recargas
+        sessionStorage.setItem("__SIDEBAR_LOAD_TIME", window.__SIDEBAR_LOAD_TIME.toString())
+      }
+
+      // Verificar si ha habido una recarga reciente
+      const lastLoadTimeStr = sessionStorage.getItem("__SIDEBAR_LOAD_TIME")
+      const currentTime = Date.now()
+      const lastLoadTime = lastLoadTimeStr ? Number.parseInt(lastLoadTimeStr, 10) : currentTime
+
+      // Si la página se ha recargado en menos de 10 segundos, podría ser un ciclo de recargas
+      if (currentTime - lastLoadTime < 10000 && lastLoadTime !== currentTime) {
+        console.warn("Detected potential reload cycle. Stabilizing...")
+
+        // Limpiar caché problemática que podría estar causando recargas
+        queryClient.clear()
+
+        // Actualizar el tiempo de carga para evitar falsos positivos
+        window.__SIDEBAR_LOAD_TIME = currentTime
+        sessionStorage.setItem("__SIDEBAR_LOAD_TIME", currentTime.toString())
+      }
+
+      // Prevenir recargas automáticas causadas por errores no capturados
+      const originalOnError = window.onerror
+      window.onerror = (message, source, lineno, colno, error) => {
+        console.error("Uncaught error:", { message, source, lineno, colno, error })
+
+        // Evitar que el error cause una recarga
+        if (originalOnError) {
+          return originalOnError(message, source, lineno, colno, error)
+        }
+        return true // Prevenir comportamiento por defecto
+      }
+
+      return () => {
+        window.onerror = originalOnError
+      }
+    }
+  }, [mounted, queryClient])
 
   // SEO optimization with structured data - only execute once
   useEffect(() => {
@@ -476,10 +758,11 @@ const SidebarOptimized = memo(function SidebarOptimized({
                         openProfile={openProfile}
                         onLogoutClick={() => setShowLogoutConfirm(true)}
                         refreshData={refreshData}
-                        isRefreshing={isRefreshing}
+                        isRefreshing={isFetchingKilometers || isFetchingBonuses}
                         bonusesData={bonusesData}
                         user={user}
-                        lastRefreshTime={lastRefreshTime}
+                        lastRefreshTime={Math.max(kilometersUpdatedAt, bonusesUpdatedAt)}
+                        upcomingActivities={upcomingActivities}
                       />
                     </div>
                   </div>
@@ -510,9 +793,12 @@ const SidebarOptimized = memo(function SidebarOptimized({
       bonusPercentage,
       kmPercentage,
       refreshData,
-      isRefreshing,
+      isFetchingKilometers,
+      isFetchingBonuses,
       bonusesData,
-      lastRefreshTime,
+      kilometersUpdatedAt,
+      bonusesUpdatedAt,
+      upcomingActivities,
     ],
   )
 
@@ -577,10 +863,10 @@ const SidebarOptimized = memo(function SidebarOptimized({
                 openProfile={openProfile}
                 onLogoutClick={() => setShowLogoutConfirm(true)}
                 refreshData={refreshData}
-                isRefreshing={isRefreshing}
+                isRefreshing={isFetchingKilometers || isFetchingBonuses}
                 bonusesData={bonusesData}
                 user={user}
-                lastRefreshTime={lastRefreshTime}
+                lastRefreshTime={Math.max(kilometersUpdatedAt, bonusesUpdatedAt)}
                 upcomingActivities={upcomingActivities}
               />
             </div>
@@ -650,6 +936,49 @@ const ProfileHeader = memo(function ProfileHeader({
 }) {
   const [isHovered, setIsHovered] = useState(false)
 
+  // Optimización: Evitar re-renderizados innecesarios
+  const memoizedGradientStyle = useMemo(
+    () => ({
+      background: `conic-gradient(
+      from 180deg at 50% 50%,
+      #10b981 0deg,
+      #34d399 72deg,
+      #6ee7b7 144deg,
+      #a7f3d0 216deg,
+      #10b981 288deg,
+      #10b981 360deg
+    )`,
+    }),
+    [],
+  )
+
+  const memoizedInnerGradientStyle = useMemo(
+    () => ({
+      background: `conic-gradient(
+      from 0deg at 50% 50%,
+      #059669 0deg,
+      #10b981 72deg,
+      #34d399 144deg,
+      #6ee7b7 216deg,
+      #059669 288deg,
+      #059669 360deg
+    )`,
+    }),
+    [],
+  )
+
+  const memoizedPulseStyle = useMemo(
+    () => ({
+      background: "radial-gradient(circle, rgba(16,185,129,0.7) 0%, rgba(16,185,129,0) 70%)",
+    }),
+    [],
+  )
+
+  // Optimización: Cargar imagen con prioridad alta y dimensiones correctas
+  const imageUrl = useMemo(() => {
+    return profileImageUrl || `/placeholder.svg?height=${collapsed ? 56 : 96}&width=${collapsed ? 56 : 96}&query=user`
+  }, [profileImageUrl, collapsed])
+
   return (
     <div className="bg-gradient-to-r from-green-600 via-emerald-500 to-green-500 relative overflow-hidden transform-gpu">
       {/* Enhanced background pattern */}
@@ -694,16 +1023,12 @@ const ProfileHeader = memo(function ProfileHeader({
             {/* Decorative rings */}
             <motion.div
               className="absolute -inset-3 rounded-full opacity-70 z-0"
-              style={{
-                background: `conic-gradient(
-                  from 180deg at 50% 50%,
-                  #10b981 0deg,
-                  #34d399 72deg,
-                  #6ee7b7 144deg,
-                  #a7f3d0 216deg,
-                  #10b981 288deg,
-                  #10b981 360deg
-                )`,
+              style={memoizedGradientStyle}
+              animate={{ rotate: [0, 360] }}
+              transition={{
+                duration: 20,
+                repeat: Number.POSITIVE_INFINITY,
+                ease: "linear",
               }}
               animate={{ rotate: [0, 360] }}
               transition={{
@@ -715,17 +1040,7 @@ const ProfileHeader = memo(function ProfileHeader({
 
             <motion.div
               className="absolute -inset-1.5 rounded-full opacity-80 z-0"
-              style={{
-                background: `conic-gradient(
-                  from 0deg at 50% 50%,
-                  #059669 0deg,
-                  #10b981 72deg,
-                  #34d399 144deg,
-                  #6ee7b7 216deg,
-                  #059669 288deg,
-                  #059669 360deg
-                )`,
-              }}
+              style={memoizedInnerGradientStyle}
               animate={{ rotate: [360, 0] }}
               transition={{
                 duration: 15,
@@ -746,9 +1061,7 @@ const ProfileHeader = memo(function ProfileHeader({
                 repeat: Number.POSITIVE_INFINITY,
                 repeatType: "loop",
               }}
-              style={{
-                background: "radial-gradient(circle, rgba(16,185,129,0.7) 0%, rgba(16,185,129,0) 70%)",
-              }}
+              style={memoizedPulseStyle}
             />
 
             {/* Main image container with enhanced styling */}
@@ -771,13 +1084,15 @@ const ProfileHeader = memo(function ProfileHeader({
                     }}
                   >
                     <img
-                      src={profileImageUrl || "/placeholder.svg?height=96&width=96&query=user"}
+                      src={imageUrl || "/placeholder.svg"}
                       alt="User profile"
                       className="h-full w-full object-cover"
                       onError={handleImageError}
-                      loading="lazy"
+                      loading="eager"
                       decoding="async"
                       fetchPriority="high"
+                      width={collapsed ? 56 : 96}
+                      height={collapsed ? 56 : 96}
                     />
                   </motion.div>
                 </div>
@@ -885,7 +1200,7 @@ const SidebarContent = memo(function SidebarContent({
   isRefreshing: boolean
   bonusesData?: any
   user?: { nombre: string; rol: string; codigo?: string }
-  lastRefreshTime: Date | null
+  lastRefreshTime: number
   upcomingActivities?: {
     id: string
     month: string
@@ -953,7 +1268,6 @@ const SidebarContent = memo(function SidebarContent({
   const kmValue = useMemo(() => {
     // First check if we have data from lastMonthData
     if (kilometersData?.lastMonthData?.valor_ejecucion) {
-      console.log("Using lastMonthData km value:", kilometersData.lastMonthData.valor_ejecucion)
       return kilometersData.lastMonthData.valor_ejecucion
     }
 
@@ -965,19 +1279,16 @@ const SidebarContent = memo(function SidebarContent({
       )
 
       if (nonZeroEntry) {
-        console.log("Found non-zero km value:", nonZeroEntry.valor_ejecucion)
         return nonZeroEntry.valor_ejecucion
       }
     }
 
     // If no non-zero value in data array, try the summary
     if (kilometersData?.summary?.totalExecuted && kilometersData.summary.totalExecuted > 0) {
-      console.log("Using summary km value:", kilometersData.summary.totalExecuted)
       return kilometersData.summary.totalExecuted
     }
 
     // Default fallback
-    console.log("No valid km value found, using 0")
     return 0
   }, [kilometersData])
 
@@ -990,30 +1301,25 @@ const SidebarContent = memo(function SidebarContent({
 
     // First check if we have lastMonthData with a non-zero value
     if (bonusesData?.lastMonthData?.finalValue && bonusesData.lastMonthData.finalValue > 0) {
-      console.log("Using lastMonthData bonus value:", bonusesData.lastMonthData.finalValue)
       return bonusesData.lastMonthData.finalValue
     }
 
     // Check if we have the format from the JSON response
     if (bonusesData?.finalBonus && bonusesData.finalBonus > 0) {
-      console.log("Using finalBonus value:", bonusesData.finalBonus)
       return bonusesData.finalBonus
     }
 
     // Otherwise try the summary data
     if (bonusesData?.summary?.totalExecuted && bonusesData.summary.totalExecuted > 0) {
-      console.log("Using summary bonus value:", bonusesData.summary.totalExecuted)
       return bonusesData.summary.totalExecuted
     }
 
     // Use the provided bonusesAvailable if it's non-zero
     if (bonusesAvailable > 0) {
-      console.log("Using bonusesAvailable:", bonusesAvailable)
       return bonusesAvailable
     }
 
     // Si no hay datos, usar el valor base según el año
-    console.log("No valid bonus value found, using base value for year", currentYear, baseBonus)
     return baseBonus
   }, [bonusesData, bonusesAvailable])
 
@@ -1022,7 +1328,8 @@ const SidebarContent = memo(function SidebarContent({
     if (!lastRefreshTime) return "Nunca"
 
     const now = new Date()
-    const diffMs = now.getTime() - lastRefreshTime.getTime()
+    const refreshDate = new Date(lastRefreshTime)
+    const diffMs = now.getTime() - refreshDate.getTime()
     const diffMins = Math.floor(diffMs / 60000)
     const diffHours = Math.floor(diffMs / 3600000)
     const diffDays = Math.floor(diffHours / 24)
@@ -1032,7 +1339,7 @@ const SidebarContent = memo(function SidebarContent({
     if (diffHours < 24) return `Hace ${diffHours} hora${diffHours === 1 ? "" : "s"}`
     if (diffDays < 7) return `Hace ${diffDays} día${diffDays === 1 ? "" : "s"}`
 
-    return lastRefreshTime.toLocaleDateString("es-ES", {
+    return refreshDate.toLocaleDateString("es-ES", {
       day: "numeric",
       month: "short",
       hour: "2-digit",
@@ -1245,28 +1552,8 @@ const SidebarContent = memo(function SidebarContent({
 
                     {/* Target indicators */}
                     <div className="mt-4 flex justify-between items-center text-xs text-gray-500">
-                      <div className="flex flex-col items-center">
-                        <span className="text-xs text-gray-500">Meta</span>
-                        <span className="font-medium tabular-nums text-gray-700">
-                          {kilometersData?.summary?.totalProgrammed > 0
-                            ? kilometersData.summary.totalProgrammed.toLocaleString()
-                            : "N/A"}{" "}
-                          km
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col items-center">
-                        <span className="text-xs text-gray-500">Recorrido</span>
-                        <span className="font-medium tabular-nums text-gray-700">
-                          {kilometersData?.summary?.totalExecuted > 0
-                            ? kilometersData.summary.totalExecuted.toLocaleString()
-                            : "N/A"}{" "}
-                          km
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col items-center">
-                        <span className="text-xs text-gray-500">Nivel</span>
+                      <div className="flex flex-col items-left">
+                        <span className="text-xs text-gray-500 text-right-12">Nivel</span>
                         <span
                           className={`font-medium ${
                             kmPercentage >= 90
@@ -1660,4 +1947,4 @@ const ContactCard = memo(function ContactCard({
   )
 })
 
-export default SidebarOptimized
+export default SidebarOptimizedWithProvider
