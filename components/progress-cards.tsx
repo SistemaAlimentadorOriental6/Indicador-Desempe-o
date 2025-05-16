@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect, useRef, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
@@ -11,7 +9,6 @@ import {
   TrendingUp,
   Clock,
   AlertTriangle,
-  ChevronDown,
   Sparkles,
   Zap,
   Target,
@@ -38,6 +35,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query"
 
 // Debug flag - set to true to enable debug mode
 const DEBUG_MODE = false
@@ -154,6 +152,18 @@ interface ProgressCardsProps {
   userCode?: string
   error?: string
 }
+
+// Create a client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      cacheTime: 10 * 60 * 1000, // 10 minutes
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+})
 
 // Animation variants
 const cardVariants = {
@@ -316,87 +326,169 @@ function getMonthName(monthNumber: number): string {
   return months[index] || ""
 }
 
-// Enhanced KilometersCard component with more interactive elements and monthly focus
+// API functions for React Query
+const api = {
+  fetchKilometers: async ({ userCode, year, month }: { userCode: string; year?: number; month?: number }) => {
+    let url = `/api/user/kilometers?codigo=${userCode}`
+    if (year) url += `&year=${year}`
+    if (month) url += `&month=${month}`
+    url += `&_t=${Date.now()}`
+
+    const response = await fetch(url)
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Error del servidor: ${response.status} ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    if (!data.success && data.error) {
+      throw new Error(data.message || "Error al cargar los datos")
+    }
+
+    // Process data
+    const processedData = data.data.map((item: MonthData) => ({
+      ...item,
+      percentage: item.valor_programacion > 0 ? Math.round((item.valor_ejecucion / item.valor_programacion) * 100) : 0,
+    }))
+
+    return {
+      monthlyData: processedData,
+      availableYears: data.availableYears || [],
+      availableMonths: data.availableMonths || [],
+      summary: data.summary || null,
+    }
+  },
+
+  fetchBonuses: async ({ userCode, year, month }: { userCode: string; year?: number; month?: number }) => {
+    let url = `/api/user/bonuses?codigo=${userCode}`
+    if (year) url += `&year=${year}`
+    if (month) url += `&month=${month}`
+    url += `&_t=${Date.now()}`
+
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`Error del servidor: ${response.status} ${response.statusText}`)
+    }
+
+    // Parse the JSON data
+    const rawData = await response.text()
+    let data
+    try {
+      data = JSON.parse(rawData)
+    } catch (parseError) {
+      throw new Error("Error al procesar la respuesta del servidor. La respuesta no es un JSON válido.")
+    }
+
+    if (data.error) {
+      throw new Error(data.error || "Error al cargar los datos de bonos")
+    }
+
+    // Filtrar deducciones duplicadas por fecha
+    let filteredDeductions = data.deductions || []
+    if (filteredDeductions.length > 0) {
+      // Crear un mapa para agrupar por fecha
+      const deductionsByDate = new Map()
+
+      filteredDeductions.forEach((deduction) => {
+        const dateKey = deduction.fechaInicio // Usar la fecha como clave
+
+        // Si ya existe una entrada para esta fecha, mantener solo la más reciente (asumiendo que el ID más alto es más reciente)
+        if (!deductionsByDate.has(dateKey) || deductionsByDate.get(dateKey).id < deduction.id) {
+          deductionsByDate.set(dateKey, deduction)
+        }
+      })
+
+      // Convertir el mapa de vuelta a un array
+      filteredDeductions = Array.from(deductionsByDate.values())
+    }
+
+    // Calcular correctamente el monto de deducción total
+    const totalDeduction =
+      filteredDeductions.length > 0 ? filteredDeductions.reduce((sum, deduction) => sum + deduction.monto, 0) : 0
+
+    // Si no hay deducciones, asegurar que el bono sea 100%
+    const baseBonus = data.baseBonus || data.summary?.totalProgrammed || 130000
+    const finalBonus =
+      filteredDeductions.length === 0
+        ? baseBonus
+        : (data.baseBonus && totalDeduction ? data.baseBonus - totalDeduction : data.finalBonus) ||
+          data.summary?.totalExecuted ||
+          130000
+
+    // Create monthly data from lastMonthData if available
+    let monthlyBonusData = []
+    if (data.lastMonthData && data.lastMonthData.year) {
+      monthlyBonusData = [
+        {
+          year: data.lastMonthData.year,
+          month: data.lastMonthData.month,
+          monthName: data.lastMonthData.monthName || getMonthName(data.lastMonthData.month),
+          bonusValue: data.lastMonthData.bonusValue || baseBonus,
+          deductionAmount: data.lastMonthData.deductionAmount || totalDeduction || 0,
+          finalValue:
+            data.lastMonthData.finalValue ||
+            (data.lastMonthData.bonusValue && data.lastMonthData.deductionAmount
+              ? data.lastMonthData.bonusValue - data.lastMonthData.deductionAmount
+              : finalBonus),
+        },
+      ]
+    }
+
+    return {
+      bonusData: {
+        baseBonus: baseBonus,
+        deductionPercentage:
+          filteredDeductions.length === 0
+            ? 0
+            : data.deductionPercentage ||
+              (data.baseBonus && totalDeduction
+                ? Math.round((totalDeduction / data.baseBonus) * 100)
+                : data.summary
+                  ? 100 - data.summary.percentage
+                  : 0),
+        deductionAmount:
+          filteredDeductions.length === 0
+            ? 0
+            : totalDeduction ||
+              data.deductionAmount ||
+              (data.summary?.totalProgrammed && data.summary?.totalExecuted
+                ? data.summary.totalProgrammed - data.summary.totalExecuted
+                : 0),
+        finalBonus: finalBonus,
+        expiresInDays: data.expiresInDays || null,
+        bonusesByYear: data.bonusesByYear || {},
+        deductions: filteredDeductions,
+        lastMonthData: data.lastMonthData || null,
+        availableYears: data.availableYears || [],
+        availableMonths: data.availableMonths || [],
+        summary: data.summary || null,
+      },
+      monthlyBonusData,
+    }
+  },
+}
+
+// Enhanced KilometersCard component with React Query
 function KilometersCard({
   userCode,
-  initialData = null,
 }: {
   userCode: string
-  initialData?: {
-    monthlyData?: MonthData[]
-    availableMonths?: number[]
-    availableYears?: number[]
-    summary?: {
-      totalProgrammed: number
-      totalExecuted: number
-      percentage: number
-    }
-  } | null
 }) {
   const [isHovered, setIsHovered] = useState(false)
   const [selectedYear, setSelectedYear] = useState<number | null>(null)
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null)
-  const [currentMonthData, setCurrentMonthData] = useState<MonthData | null>(null)
-  const [monthlyData, setMonthlyData] = useState<MonthData[]>([])
-  const [availableYears, setAvailableYears] = useState<number[]>([])
-  const [availableMonths, setAvailableMonths] = useState<number[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [summary, setSummary] = useState<{
-    totalProgrammed: number
-    totalExecuted: number
-    percentage: number
-  } | null>(null)
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  const queryClient = useQueryClient()
 
-  // Fetch data from API
-  const fetchData = async (year?: number | null, month?: number | null) => {
-    try {
-      setIsLoading(true)
-
-      let url = `/api/user/kilometers?codigo=${userCode}`
-      if (year) url += `&year=${year}`
-      if (month) url += `&month=${month}`
-
-      // Add timestamp to prevent caching
-      url += `&_t=${Date.now()}`
-
-      console.log("Fetching data from:", url)
-
-      const response = await fetch(url)
-
-      // Verificar si la respuesta es exitosa
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error("API response error:", response.status, errorText)
-        throw new Error(`Error del servidor: ${response.status} ${response.statusText}`)
-      }
-
-      // Intentar parsear la respuesta como JSON
-      let data
-      try {
-        data = await response.json()
-      } catch (parseError) {
-        console.error("JSON parse error:", parseError)
-        throw new Error("Error al procesar la respuesta del servidor. La respuesta no es un JSON válido.")
-      }
-
-      if (!data.success && data.error) {
-        throw new Error(data.message || "Error al cargar los datos")
-      }
-
-      // Process data
-      const processedData = data.data.map((item: MonthData) => ({
-        ...item,
-        percentage:
-          item.valor_programacion > 0 ? Math.round((item.valor_ejecucion / item.valor_programacion) * 100) : 0,
-      }))
-
-      setMonthlyData(processedData)
-      setAvailableYears(data.availableYears || [])
-      setAvailableMonths(data.availableMonths || [])
-      setSummary(data.summary || null)
-
+  // Main query for kilometers data
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
+    queryKey: ["kilometers", userCode, selectedYear, selectedMonth],
+    queryFn: () =>
+      api.fetchKilometers({
+        userCode,
+        year: selectedYear || undefined,
+        month: selectedMonth || undefined,
+      }),
+    onSuccess: (data) => {
       // Set default selections if not already set
       if (!selectedYear && data.availableYears && data.availableYears.length) {
         setSelectedYear(data.availableYears[0])
@@ -405,72 +497,28 @@ function KilometersCard({
       if (!selectedMonth && data.availableMonths && data.availableMonths.length) {
         setSelectedMonth(data.availableMonths[data.availableMonths.length - 1])
       }
+    },
+  })
 
-      // Find current month data
-      if (year && month) {
-        const matchingData = processedData.find((item: MonthData) => item.year === year && item.month === month)
-        setCurrentMonthData(matchingData || null)
-      } else if (processedData.length > 0) {
-        setCurrentMonthData(processedData[0])
-      }
+  // Find current month data
+  const currentMonthData = useMemo(() => {
+    if (!data?.monthlyData) return null
 
-      setError(null)
-    } catch (err) {
-      console.error("Error fetching data:", err)
-      setError(err instanceof Error ? err.message : "Error desconocido")
-    } finally {
-      setIsLoading(false)
-      setIsRefreshing(false)
-    }
-  }
-
-  // Initialize with provided data or fetch from API
-  useEffect(() => {
-    if (initialData) {
-      if (initialData.monthlyData) {
-        setMonthlyData(initialData.monthlyData)
-      }
-      if (initialData.availableYears) {
-        setAvailableYears(initialData.availableYears)
-        if (initialData.availableYears.length) {
-          setSelectedYear(initialData.availableYears[0])
-        }
-      }
-      if (initialData.availableMonths) {
-        setAvailableMonths(initialData.availableMonths)
-        if (initialData.availableMonths.length) {
-          setSelectedMonth(initialData.availableMonths[initialData.availableMonths.length - 1])
-        }
-      }
-      if (initialData.summary) {
-        setSummary(initialData.summary)
-      }
-      setIsLoading(false)
-    } else {
-      fetchData()
-    }
-  }, [userCode, initialData])
-
-  // Update when year selection changes
-  useEffect(() => {
-    if (selectedYear) {
-      fetchData(selectedYear)
-    }
-  }, [selectedYear])
-
-  // Update current month data when month selection changes
-  useEffect(() => {
     if (selectedYear && selectedMonth) {
-      fetchData(selectedYear, selectedMonth)
+      return (
+        data.monthlyData.find((item: MonthData) => item.year === selectedYear && item.month === selectedMonth) || null
+      )
+    } else if (data.monthlyData.length > 0) {
+      return data.monthlyData[0]
     }
-  }, [selectedMonth])
+
+    return null
+  }, [data?.monthlyData, selectedYear, selectedMonth])
 
   // Handle refresh data
-  const handleRefreshData = async () => {
-    if (isRefreshing) return
-
-    setIsRefreshing(true)
-    await fetchData(selectedYear, selectedMonth)
+  const handleRefreshData = () => {
+    if (isFetching) return
+    refetch()
   }
 
   // Use either currently selected month data or fallback to summary
@@ -478,9 +526,9 @@ function KilometersCard({
     year: selectedYear || new Date().getFullYear(),
     month: selectedMonth || new Date().getMonth() + 1,
     monthName: getMonthName(selectedMonth || new Date().getMonth() + 1),
-    valor_programacion: summary?.totalProgrammed || 0,
-    valor_ejecucion: summary?.totalExecuted || 0,
-    percentage: summary?.percentage || 0,
+    valor_programacion: data?.summary?.totalProgrammed || 0,
+    valor_ejecucion: data?.summary?.totalExecuted || 0,
+    percentage: data?.summary?.percentage || 0,
   }
 
   const animatedKm = useAnimatedCounter(Number(displayData.valor_ejecucion))
@@ -496,15 +544,15 @@ function KilometersCard({
 
   // Helper function to navigate months
   const navigateMonth = (direction: "prev" | "next") => {
-    if (!availableMonths || !availableMonths.length) return
+    if (!data?.availableMonths || !data.availableMonths.length) return
 
-    const currentIndex = availableMonths.findIndex((m) => m === selectedMonth)
+    const currentIndex = data.availableMonths.findIndex((m) => m === selectedMonth)
     if (currentIndex === -1) return
 
     if (direction === "prev" && currentIndex > 0) {
-      setSelectedMonth(availableMonths[currentIndex - 1])
-    } else if (direction === "next" && currentIndex < availableMonths.length - 1) {
-      setSelectedMonth(availableMonths[currentIndex + 1])
+      setSelectedMonth(data.availableMonths[currentIndex - 1])
+    } else if (direction === "next" && currentIndex < data.availableMonths.length - 1) {
+      setSelectedMonth(data.availableMonths[currentIndex + 1])
     }
   }
 
@@ -548,7 +596,11 @@ function KilometersCard({
           <CardDescription>Por favor, inténtalo de nuevo más tarde.</CardDescription>
         </CardHeader>
         <CardContent className="pb-4">
-          <p className="text-gray-600">{error}</p>
+          <p className="text-gray-600">{error instanceof Error ? error.message : "Error desconocido"}</p>
+          <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Reintentar
+          </Button>
         </CardContent>
       </Card>
     )
@@ -637,8 +689,8 @@ function KilometersCard({
             variant="ghost"
             size="icon"
             onClick={handleRefreshData}
-            disabled={isRefreshing}
-            className={`h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 text-white ${isRefreshing ? "animate-spin" : ""}`}
+            disabled={isFetching}
+            className={`h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 text-white ${isFetching ? "animate-spin" : ""}`}
           >
             <RefreshCw className="h-4 w-4" />
             <span className="sr-only">Actualizar datos</span>
@@ -696,7 +748,7 @@ function KilometersCard({
                       </DialogHeader>
                       <ScrollArea className="mt-4 max-h-[40vh]">
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          {availableYears.map((year) => (
+                          {data?.availableYears?.map((year) => (
                             <Button
                               key={year}
                               variant="outline"
@@ -719,7 +771,7 @@ function KilometersCard({
                           className="text-white/80 hover:text-white hover:bg-white/20"
                           onClick={() => {
                             setSelectedYear(null)
-                            fetchData()
+                            setSelectedMonth(null)
                           }}
                         >
                           Limpiar selección
@@ -761,7 +813,7 @@ function KilometersCard({
                       <div className="mt-4">
                         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((month) => {
-                            const isAvailable = availableMonths.includes(month)
+                            const isAvailable = data?.availableMonths?.includes(month) || false
                             return (
                               <Button
                                 key={month}
@@ -794,7 +846,6 @@ function KilometersCard({
                           className="text-white/80 hover:text-white hover:bg-white/20"
                           onClick={() => {
                             setSelectedMonth(null)
-                            fetchData(selectedYear)
                           }}
                         >
                           Limpiar selección
@@ -824,7 +875,6 @@ function KilometersCard({
                   onClick={() => {
                     setSelectedYear(null)
                     setSelectedMonth(null)
-                    fetchData()
                   }}
                 >
                   Limpiar filtros
@@ -986,195 +1036,19 @@ function KilometersCard({
   )
 }
 
-// Enhanced BonusCard component with more interactive elements and monthly focus
+// Enhanced BonusCard component with React Query
 function BonusCard({
   userCode,
-  bonusData: initialBonusData,
-  lastMonthData: initialLastMonthData,
-  isLoading: initialIsLoading,
-  monthlyBonusData: initialMonthlyBonusData,
 }: {
   userCode: string
-  bonusData: BonusData
-  lastMonthData: LastMonthData | null
-  isLoading: boolean
-  monthlyBonusData?: {
-    year: number
-    month: number
-    monthName: string
-    bonusValue: number
-    deductionAmount: number
-    finalValue: number
-  }[]
 }) {
   const [showDeductions, setShowDeductions] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
-  const [bonusError, setBonusError] = useState<string | null>(null)
   const [selectedYear, setSelectedYear] = useState<number | null>(null)
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null)
-  const [isLoading, setIsLoading] = useState(initialIsLoading)
-  const [error, setError] = useState<string | null>(null)
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  const queryClient = useQueryClient()
 
-  // Function to check API directly
-  const checkApiDirectly = async () => {
-    try {
-      setIsLoading(true)
-
-      // Create a basic URL without any parameters
-      const baseUrl = `/api/user/bonuses?codigo=${userCode}&_t=${Date.now()}`
-      console.log("Checking API directly:", baseUrl)
-
-      const response = await fetch(baseUrl)
-      const responseStatus = response.status
-      const responseStatusText = response.statusText
-
-      // Try to get the response as text first
-      const responseText = await response.text()
-      console.log("API Direct Check - Status:", responseStatus, responseStatusText)
-      console.log("API Direct Check - Response:", responseText)
-
-      // Try to parse as JSON if possible
-      try {
-        const responseJson = JSON.parse(responseText)
-        console.log("API Direct Check - Parsed JSON:", responseJson)
-
-        // If we got valid JSON, update the UI with this data
-        if (responseJson && !responseJson.error) {
-          // Process the data as in fetchBonusData
-          const validData = {
-            baseBonus: responseJson.baseBonus || responseJson.summary?.totalProgrammed || 130000,
-            deductionPercentage:
-              responseJson.deductionPercentage || (responseJson.summary ? 100 - responseJson.summary.percentage : 0),
-            deductionAmount:
-              responseJson.deductionAmount ||
-              (responseJson.summary?.totalProgrammed && responseJson.summary?.totalExecuted
-                ? responseJson.summary.totalProgrammed - responseJson.summary.totalExecuted
-                : 0),
-            finalBonus: responseJson.finalBonus || responseJson.summary?.totalExecuted || 130000,
-            expiresInDays: responseJson.expiresInDays || null,
-            bonusesByYear: responseJson.bonusesByYear || {},
-            deductions: responseJson.deductions || [],
-            lastMonthData: responseJson.lastMonthData || null,
-            availableYears: responseJson.availableYears || [],
-            availableMonths: responseJson.availableMonths || [],
-            summary: responseJson.summary || null,
-          }
-
-          setBonusData(validData)
-
-          if (responseJson.lastMonthData) {
-            setLastMonthData(responseJson.lastMonthData)
-          }
-
-          // Update monthly data
-          if (responseJson.lastMonthData && responseJson.lastMonthData.year) {
-            setMonthlyBonusData([
-              {
-                year: responseJson.lastMonthData.year,
-                month: responseJson.lastMonthData.month,
-                monthName: responseJson.lastMonthData.monthName || getMonthName(responseJson.lastMonthData.month),
-                bonusValue: responseJson.lastMonthData.bonusValue || validData.baseBonus,
-                deductionAmount: responseJson.lastMonthData.deductionAmount || 0,
-                finalValue: responseJson.lastMonthData.finalValue || validData.finalBonus,
-              },
-            ])
-          }
-
-          setBonusError(null)
-        } else {
-          // If there's an error in the JSON, set default values
-          setDefaultValues()
-          setBonusError(responseJson.error || "Error en la respuesta de la API")
-        }
-      } catch (parseError) {
-        console.error("API Direct Check - JSON Parse Error:", parseError)
-        // If we couldn't parse JSON, set default values
-        setDefaultValues()
-        setBonusError("Error al procesar la respuesta de la API")
-      }
-    } catch (error) {
-      console.error("API Direct Check - Fetch Error:", error)
-      setDefaultValues()
-      setBonusError(`Error al verificar la API: ${error instanceof Error ? error.message : String(error)}`)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Helper function to set default values
-  const setDefaultValues = () => {
-    const currentDate = new Date()
-    setBonusData({
-      ...defaultBonusData,
-      baseBonus: 130000,
-      finalBonus: 130000,
-      deductionPercentage: 0,
-      deductionAmount: 0,
-    })
-
-    setMonthlyBonusData([
-      {
-        year: currentDate.getFullYear(),
-        month: currentDate.getMonth() + 1,
-        monthName: getMonthName(currentDate.getMonth() + 1),
-        bonusValue: 130000,
-        deductionAmount: 0,
-        finalValue: 130000,
-      },
-    ])
-  }
-
-  // Add this useEffect to automatically check the API directly if the normal fetch fails
-  useEffect(() => {
-    if (bonusError) {
-      console.log("Detected bonus error, trying direct API check as fallback")
-      // Wait a moment before trying the direct check
-      const timer = setTimeout(() => {
-        checkApiDirectly()
-      }, 2000)
-
-      return () => clearTimeout(timer)
-    }
-  }, [bonusError])
-
-  // Safety timeout to ensure loading state is never stuck
-  useEffect(() => {
-    // Safety timeout to ensure loading state is never stuck
-    const safetyTimeout = setTimeout(() => {
-      if (isLoading) {
-        console.log("Safety timeout triggered - forcing loading state to false")
-        setIsLoading(false)
-
-        // Set default data if we're still loading
-        if (!displayData) {
-          const currentDate = new Date()
-          setBonusData({
-            ...defaultBonusData,
-            baseBonus: 130000,
-            finalBonus: 130000,
-            deductionPercentage: 0,
-            deductionAmount: 0,
-          })
-
-          setMonthlyBonusData([
-            {
-              year: currentDate.getFullYear(),
-              month: currentDate.getMonth() + 1,
-              monthName: getMonthName(currentDate.getMonth() + 1),
-              bonusValue: 130000,
-              deductionAmount: 0,
-              finalValue: 130000,
-            },
-          ])
-        }
-      }
-    }, 8000) // 8 seconds max loading time
-
-    return () => clearTimeout(safetyTimeout)
-  }, [isLoading])
-
-  // Asegurar que bonusData siempre tenga valores por defecto
+  // Default bonus data
   const defaultBonusData: BonusData = {
     baseBonus: null,
     deductionPercentage: null,
@@ -1188,299 +1062,79 @@ function BonusCard({
     availableMonths: [],
   }
 
-  // Estados locales para manejar los datos filtrados
-  const [bonusData, setBonusData] = useState<BonusData>(
-    initialBonusData && Object.keys(initialBonusData).length > 0
-      ? {
-          ...defaultBonusData,
-          ...initialBonusData,
-        }
-      : defaultBonusData,
-  )
-
-  // Asegurar que lastMonthData tenga valores por defecto
-  // No crear valores por defecto, simplemente inicializar como null
-  const [lastMonthData, setLastMonthData] = useState<LastMonthData | null>(initialLastMonthData || null)
-
-  const [monthlyBonusData, setMonthlyBonusData] = useState<
-    {
-      year: number
-      month: number
-      monthName: string
-      bonusValue: number
-      deductionAmount: number
-      finalValue: number
-    }[]
-  >(initialMonthlyBonusData || [])
-
-  // Inicializar años y meses disponibles
-  useEffect(() => {
-    // Si no hay datos iniciales, establecer valores por defecto
-    if (!initialBonusData || Object.keys(initialBonusData).length === 0) {
-      setBonusData(defaultBonusData)
-      setLastMonthData(null)
-      setIsLoading(false)
-      return
-    }
-
-    if (initialBonusData.availableYears && initialBonusData.availableYears.length > 0) {
-      // Establecer el año más reciente como predeterminado
-      setSelectedYear(initialBonusData.availableYears[0])
-    }
-
-    setBonusData({
-      ...defaultBonusData,
-      ...initialBonusData,
-    })
-
-    setLastMonthData(initialLastMonthData || null)
-    setMonthlyBonusData(initialMonthlyBonusData || [])
-  }, [initialBonusData, initialLastMonthData, initialMonthlyBonusData])
-
-  // Fetch bonus data with filters
-  // Modificar la función fetchBonusData en el componente BonusCard para manejar correctamente la respuesta
-  const fetchBonusData = async (year?: number | null, month?: number | null) => {
-    try {
-      setIsLoading(true)
-      setError(null)
-
-      let url = `/api/user/bonuses?codigo=${userCode}`
-      if (year) url += `&year=${year}`
-      if (month) url += `&month=${month}`
-
-      // Add timestamp to prevent caching
-      url += `&_t=${Date.now()}`
-
-      console.log("Fetching bonus data from:", url)
-
-      const response = await fetch(url)
-
-      if (!response.ok) {
-        throw new Error(`Error del servidor: ${response.status} ${response.statusText}`)
+  // Main query for bonus data
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
+    queryKey: ["bonuses", userCode, selectedYear, selectedMonth],
+    queryFn: () =>
+      api.fetchBonuses({
+        userCode,
+        year: selectedYear || undefined,
+        month: selectedMonth || undefined,
+      }),
+    onSuccess: (data) => {
+      // Set default selections if not already set
+      if (!selectedYear && data.bonusData.availableYears && data.bonusData.availableYears.length) {
+        setSelectedYear(data.bonusData.availableYears[0])
       }
 
-      // Log the raw response for debugging
-      const rawData = await response.text()
-      console.log("Raw bonus data response:", rawData)
-
-      // Parse the JSON data
-      let data
-      try {
-        data = JSON.parse(rawData)
-      } catch (parseError) {
-        console.error("JSON parse error:", parseError)
-        throw new Error("Error al procesar la respuesta del servidor. La respuesta no es un JSON válido.")
+      if (!selectedMonth && data.bonusData.availableMonths && data.bonusData.availableMonths.length) {
+        setSelectedMonth(data.bonusData.availableMonths[data.bonusData.availableMonths.length - 1])
       }
-
-      console.log("Parsed bonus data:", data)
-
-      // Considerar la respuesta exitosa incluso si no tiene el campo success explícito
-      // pero tiene datos relevantes
-      if (data.error) {
-        throw new Error(data.error || "Error al cargar los datos de bonos")
-      }
-
-      // Filtrar deducciones duplicadas por fecha
-      let filteredDeductions = data.deductions || []
-      if (filteredDeductions.length > 0) {
-        // Crear un mapa para agrupar por fecha
-        const deductionsByDate = new Map()
-
-        filteredDeductions.forEach((deduction) => {
-          const dateKey = deduction.fechaInicio // Usar la fecha como clave
-
-          // Si ya existe una entrada para esta fecha, mantener solo la más reciente (asumiendo que el ID más alto es más reciente)
-          if (!deductionsByDate.has(dateKey) || deductionsByDate.get(dateKey).id < deduction.id) {
-            deductionsByDate.set(dateKey, deduction)
-          }
-        })
-
-        // Convertir el mapa de vuelta a un array
-        filteredDeductions = Array.from(deductionsByDate.values())
-      }
-
-      // Calcular correctamente el monto de deducción total
-      const totalDeduction =
-        filteredDeductions.length > 0 ? filteredDeductions.reduce((sum, deduction) => sum + deduction.monto, 0) : 0
-
-      // Si no hay deducciones, asegurar que el bono sea 100%
-      const baseBonus = data.baseBonus || data.summary?.totalProgrammed || 130000
-      const finalBonus =
-        filteredDeductions.length === 0
-          ? baseBonus
-          : (data.baseBonus && totalDeduction ? data.baseBonus - totalDeduction : data.finalBonus) ||
-            data.summary?.totalExecuted ||
-            130000
-
-      // Ensure we have valid data or use defaults
-      const validData = {
-        baseBonus: baseBonus,
-        deductionPercentage:
-          filteredDeductions.length === 0
-            ? 0
-            : data.deductionPercentage ||
-              (data.baseBonus && totalDeduction
-                ? Math.round((totalDeduction / data.baseBonus) * 100)
-                : data.summary
-                  ? 100 - data.summary.percentage
-                  : 0),
-        deductionAmount:
-          filteredDeductions.length === 0
-            ? 0
-            : totalDeduction ||
-              data.deductionAmount ||
-              (data.summary?.totalProgrammed && data.summary?.totalExecuted
-                ? data.summary.totalProgrammed - data.summary.totalExecuted
-                : 0),
-        finalBonus: finalBonus,
-        expiresInDays: data.expiresInDays || null,
-        bonusesByYear: data.bonusesByYear || {},
-        deductions: filteredDeductions,
-        lastMonthData: data.lastMonthData || null,
-        availableYears: data.availableYears || [],
-        availableMonths: data.availableMonths || [],
-        summary: data.summary || null,
-      }
-
-      // Actualizar los datos de bonos
-      setBonusData(validData)
-
-      // Actualizar lastMonthData si está disponible
-      if (data.lastMonthData) {
-        // Asegurarse de que los valores de lastMonthData sean correctos
-        const lastMonth = {
-          ...data.lastMonthData,
-          deductionAmount: data.lastMonthData.deductionAmount || totalDeduction || 0,
-          finalValue:
-            data.lastMonthData.finalValue ||
-            (data.lastMonthData.bonusValue && data.lastMonthData.deductionAmount
-              ? data.lastMonthData.bonusValue - data.lastMonthData.deductionAmount
-              : validData.finalBonus),
-        }
-        setLastMonthData(lastMonth)
-      }
-
-      // Crear datos mensuales a partir de lastMonthData si está disponible
-      if (data.lastMonthData && data.lastMonthData.year) {
-        const monthlyData = [
-          {
-            year: data.lastMonthData.year,
-            month: data.lastMonthData.month,
-            monthName: data.lastMonthData.monthName || getMonthName(data.lastMonthData.month),
-            bonusValue: data.lastMonthData.bonusValue || validData.baseBonus,
-            deductionAmount: data.lastMonthData.deductionAmount || totalDeduction || 0,
-            finalValue:
-              data.lastMonthData.finalValue ||
-              (data.lastMonthData.bonusValue && data.lastMonthData.deductionAmount
-                ? data.lastMonthData.bonusValue - data.lastMonthData.deductionAmount
-                : validData.finalBonus),
-          },
-        ]
-        setMonthlyBonusData(monthlyData)
-      } else {
-        // Set default monthly data if none is available
-        const currentDate = new Date()
-        setMonthlyBonusData([
-          {
-            year: currentDate.getFullYear(),
-            month: currentDate.getMonth() + 1,
-            monthName: getMonthName(currentDate.getMonth() + 1),
-            bonusValue: validData.baseBonus,
-            deductionAmount: validData.deductionAmount,
-            finalValue: validData.finalBonus,
-          },
-        ])
-      }
-
-      setBonusError(null)
-    } catch (err) {
-      console.error("Error fetching bonus data:", err)
-      setError(err instanceof Error ? err.message : "Error desconocido")
-
-      // Always set default values in case of error to prevent loading state
-      const currentDate = new Date()
-      const defaultData = {
-        ...defaultBonusData,
-        baseBonus: 130000,
-        finalBonus: 130000,
-        deductionPercentage: 0,
-        deductionAmount: 0,
-      }
-
-      setBonusData(defaultData)
-
-      setMonthlyBonusData([
-        {
-          year: currentDate.getFullYear(),
-          month: currentDate.getMonth() + 1,
-          monthName: getMonthName(currentDate.getMonth() + 1),
-          bonusValue: 130000,
-          deductionAmount: 0,
-          finalValue: 130000,
-        },
-      ])
-    } finally {
-      // Always set loading to false, even if there's an error
-      setIsLoading(false)
-      setIsRefreshing(false)
-    }
-  }
+    },
+  })
 
   // Handle refresh data
-  const handleRefreshData = async () => {
-    if (isRefreshing) return
-
-    setIsRefreshing(true)
-    await fetchBonusData(selectedYear, selectedMonth)
+  const handleRefreshData = () => {
+    if (isFetching) return
+    refetch()
   }
 
-  // Determinar qué datos mostrar basado en los filtros
+  // Determine display data based on filters
   const displayData = useMemo(() => {
-    // Si no hay datos reales, retornar null
-    if (!bonusData || (!bonusData.baseBonus && bonusData.baseBonus !== 0)) {
-      return null
-    }
+    if (!data) return null
 
-    // Si hay datos mensuales y están filtrados, usar esos
-    if (monthlyBonusData && monthlyBonusData.length > 0) {
-      // Buscar datos que coincidan con los filtros
+    // If there are monthly data and they are filtered, use those
+    if (data.monthlyBonusData && data.monthlyBonusData.length > 0) {
+      // Look for data that match the filters
       if (selectedYear && selectedMonth) {
-        const filtered = monthlyBonusData.find((item) => item.year === selectedYear && item.month === selectedMonth)
+        const filtered = data.monthlyBonusData.find(
+          (item) => item.year === selectedYear && item.month === selectedMonth,
+        )
         if (filtered) return filtered
       }
 
-      // Si no hay coincidencia exacta, usar el primer elemento
-      return monthlyBonusData[0]
+      // If no exact match, use the first element
+      return data.monthlyBonusData[0]
     }
 
-    // Si hay datos del último mes, usarlos
-    if (lastMonthData) {
+    // If there is lastMonthData, use it
+    if (data.bonusData.lastMonthData) {
       return {
-        year: lastMonthData.year,
-        month: lastMonthData.month,
-        monthName: lastMonthData.monthName?.toLowerCase(),
-        bonusValue: lastMonthData.bonusValue,
-        deductionAmount: lastMonthData.deductionAmount,
-        finalValue: lastMonthData.finalValue,
+        year: data.bonusData.lastMonthData.year,
+        month: data.bonusData.lastMonthData.month,
+        monthName: data.bonusData.lastMonthData.monthName?.toLowerCase(),
+        bonusValue: data.bonusData.lastMonthData.bonusValue,
+        deductionAmount: data.bonusData.lastMonthData.deductionAmount,
+        finalValue: data.bonusData.lastMonthData.finalValue,
       }
     }
 
-    // Si hay datos base pero no datos específicos de mes
-    if (bonusData.baseBonus !== null && bonusData.finalBonus !== null) {
+    // If there is base data but no specific month data
+    if (data.bonusData.baseBonus !== null && data.bonusData.finalBonus !== null) {
       return {
         year: selectedYear || new Date().getFullYear(),
         month: selectedMonth || new Date().getMonth() + 1,
         monthName: selectedMonth ? getMonthName(selectedMonth).toLowerCase() : "",
-        bonusValue: bonusData.baseBonus,
-        deductionAmount: bonusData.deductionAmount || 0,
-        finalValue: bonusData.finalBonus,
+        bonusValue: data.bonusData.baseBonus,
+        deductionAmount: data.bonusData.deductionAmount || 0,
+        finalValue: data.bonusData.finalBonus,
       }
     }
 
     return null
-  }, [monthlyBonusData, lastMonthData, bonusData, selectedYear, selectedMonth])
+  }, [data, selectedYear, selectedMonth])
 
-  // Calculate values (con protección contra valores nulos o indefinidos)
+  // Calculate values
   const bonusValue = displayData?.finalValue || 0
   const animatedBonus = useAnimatedCounter(bonusValue)
   const deductionPercentage =
@@ -1488,7 +1142,7 @@ function BonusCard({
       ? Math.min(100, Math.round((displayData.deductionAmount / displayData.bonusValue) * 100))
       : 0
 
-  // Format currency con protección contra nulos
+  // Format currency
   const formatCurrency = (amount: number | null) => {
     if (amount === null || amount === undefined || isNaN(amount)) return "$0"
     return new Intl.NumberFormat("es-CO", {
@@ -1498,181 +1152,30 @@ function BonusCard({
     }).format(amount)
   }
 
-  // Manejar cambio de año
-  const handleYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const year = e.target.value ? Number(e.target.value) : null
-    setSelectedYear(year)
-    setSelectedMonth(null) // Resetear el mes al cambiar el año
-    fetchBonusData(year, null)
-  }
-
-  // Manejar cambio de mes
-  const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const month = e.target.value ? Number(e.target.value) : null
-    setSelectedMonth(month)
-    fetchBonusData(selectedYear, month)
-  }
-
-  // Limpiar filtros
+  // Clear filters
   const handleClearFilters = () => {
     setSelectedYear(null)
     setSelectedMonth(null)
-    fetchBonusData()
   }
 
   if (isLoading) {
     return (
-      <motion.div
-        variants={cardVariants}
-        initial="initial"
-        animate="animate"
-        whileHover="hover"
-        className="relative bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl shadow-lg overflow-hidden"
-      >
-        <DecorativePattern variant="waves" />
-
-        {/* Decorative elements */}
-        <div className="absolute top-0 left-0 w-32 h-32 -mt-10 -ml-10 bg-white/10 rounded-full blur-2xl"></div>
-        <div className="absolute bottom-0 right-0 w-24 h-24 -mb-8 -mr-8 bg-white/10 rounded-full blur-xl"></div>
-
-        <CardHeader className="pb-2 text-white relative z-10">
-          <div className="flex justify-between items-start">
-            <div>
-              <CardTitle className="text-xl flex items-center">
-                <Gift className="h-5 w-5 mr-2" />
-                Bonos Mensuales
-              </CardTitle>
-              <CardDescription className="text-emerald-100">Valor después de descuentos</CardDescription>
-            </div>
-
-            {/* Add a retry button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => fetchBonusData()}
-              className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 text-white"
-            >
-              <RefreshCw className="h-4 w-4 animate-spin" />
-              <span className="sr-only">Reintentar carga</span>
-            </Button>
-          </div>
+      <Card className="rounded-xl shadow-md overflow-hidden">
+        <CardHeader className="pb-2">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-4 w-48 mt-1" />
         </CardHeader>
-        <CardContent className="pb-4 text-white relative z-10">
-          <div className="flex items-baseline mb-4">
-            <p className="text-4xl font-bold">$130.000</p>
-            <motion.div
-              animate={{
-                opacity: [0.5, 1, 0.5],
-                scale: [0.98, 1, 0.98],
-              }}
-              transition={{
-                duration: 1.5,
-                repeat: Number.POSITIVE_INFINITY,
-                repeatType: "reverse",
-              }}
-              className="ml-2 bg-white/20 rounded-md px-2 py-1 text-xs"
-            >
-              Cargando...
-            </motion.div>
-          </div>
-
-          <div className="w-full bg-white/20 h-3 rounded-full overflow-hidden mb-2 backdrop-blur-sm">
-            <motion.div
-              className="h-full rounded-full relative bg-white/60"
-              animate={{
-                width: ["0%", "30%", "60%", "100%", "60%", "30%", "0%"],
-              }}
-              transition={{
-                duration: 2,
-                repeat: Number.POSITIVE_INFINITY,
-                repeatType: "reverse",
-              }}
-            />
-          </div>
-
-          <div className="flex justify-between text-xs text-white/70 mb-4">
-            <span>Cargando datos...</span>
-            <span>Base: $130.000</span>
-          </div>
-
-          <motion.div
-            className="bg-teal-600/30 backdrop-blur-sm rounded-lg p-4 mb-3 border border-white/10"
-            whileHover={{
-              backgroundColor: "rgba(13, 148, 136, 0.4)",
-              borderColor: "rgba(255, 255, 255, 0.2)",
-              y: -2,
-            }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="flex flex-col">
-                <div className="flex items-center text-teal-100 text-xs mb-1">
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                  <span>Valor base</span>
-                </div>
-                <span className="font-medium">$130.000</span>
-              </div>
-              <div className="flex flex-col">
-                <div className="flex items-center text-teal-100 text-xs mb-1">
-                  <AlertTriangle className="h-3 w-3 mr-1" />
-                  <span>Deducción</span>
-                </div>
-                <span className="font-medium text-red-200">-$0</span>
-              </div>
-            </div>
-            <div className="mt-3 pt-3 border-t border-teal-500/30 flex justify-between items-center">
-              <span className="text-teal-100 text-xs">Valor final</span>
-              <span className="font-bold text-lg">$130.000</span>
-            </div>
-          </motion.div>
-
-          {/* Add a message about the loading state */}
-          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-sm border border-white/10">
-            <div className="flex items-center">
-              <AlertTriangle className="h-4 w-4 mr-2 text-yellow-300" />
-              <span>
-                Cargando datos de bonificaciones. Si esto toma demasiado tiempo,
-                <Button
-                  variant="link"
-                  className="text-white underline p-0 h-auto font-normal"
-                  onClick={() => fetchBonusData()}
-                >
-                  haz clic aquí para reintentar
-                </Button>
-                .
-              </span>
-            </div>
-          </div>
+        <CardContent className="pb-4">
+          <Skeleton className="h-8 w-full mb-4" />
+          <Skeleton className="h-10 w-40 mb-4" />
+          <Skeleton className="h-2 w-full mb-2" />
+          <Skeleton className="h-4 w-full mb-4" />
+          <Skeleton className="h-20 w-full rounded-lg mb-4" />
         </CardContent>
-        <CardFooter className="bg-teal-700/30 backdrop-blur-sm pt-3 pb-3 border-t border-white/10 relative z-10">
-          <div className="flex items-center w-full justify-between text-white/90 text-sm">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={checkApiDirectly}
-              className="text-white/80 hover:text-white hover:bg-white/20 text-xs"
-            >
-              <RefreshCw className="h-3 w-3 mr-1" />
-              Verificar API
-            </Button>
-
-            <div className="flex items-center">
-              <Star className="h-4 w-4 mr-2" />
-              <motion.span
-                animate={{
-                  opacity: [1, 0.7, 1],
-                }}
-                transition={{
-                  duration: 1.5,
-                  repeat: Number.POSITIVE_INFINITY,
-                }}
-              >
-                Cargando información...
-              </motion.span>
-            </div>
-          </div>
+        <CardFooter className="bg-gray-50 pt-3 pb-3 border-t">
+          <Skeleton className="h-9 w-full rounded-md" />
         </CardFooter>
-      </motion.div>
+      </Card>
     )
   }
 
@@ -1687,7 +1190,11 @@ function BonusCard({
           <CardDescription>Por favor, inténtalo de nuevo más tarde.</CardDescription>
         </CardHeader>
         <CardContent className="pb-4">
-          <p className="text-gray-600">{error}</p>
+          <p className="text-gray-600">{error instanceof Error ? error.message : "Error desconocido"}</p>
+          <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Reintentar
+          </Button>
         </CardContent>
       </Card>
     )
@@ -1784,14 +1291,14 @@ function BonusCard({
               <CardDescription className="text-emerald-100">Valor después de descuentos</CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              {bonusData.expiresInDays !== null && bonusData.expiresInDays !== undefined && (
+              {data?.bonusData.expiresInDays !== null && data?.bonusData.expiresInDays !== undefined && (
                 <Badge className="bg-white/20 text-white border-0 flex items-center backdrop-blur-sm">
                   <Clock className="h-3 w-3 mr-1" />
                   <motion.span
                     animate={{ opacity: [1, 0.7, 1] }}
                     transition={{ repeat: Number.POSITIVE_INFINITY, duration: 1.5, ease: "easeInOut" }}
                   >
-                    {bonusData.expiresInDays} días
+                    {data.bonusData.expiresInDays} días
                   </motion.span>
                 </Badge>
               )}
@@ -1801,8 +1308,8 @@ function BonusCard({
                 variant="ghost"
                 size="icon"
                 onClick={handleRefreshData}
-                disabled={isRefreshing}
-                className={`h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 text-white ${isRefreshing ? "animate-spin" : ""}`}
+                disabled={isFetching}
+                className={`h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 text-white ${isFetching ? "animate-spin" : ""}`}
               >
                 <RefreshCw className="h-4 w-4" />
                 <span className="sr-only">Actualizar datos</span>
@@ -1812,7 +1319,7 @@ function BonusCard({
         </CardHeader>
         <CardContent className="pb-4 text-white relative z-10">
           {/* Year/Month Selector */}
-          {bonusData.availableYears && bonusData.availableYears.length > 0 && (
+          {data?.bonusData.availableYears && data.bonusData.availableYears.length > 0 && (
             <div className="mb-4">
               <motion.div
                 className="bg-white/10 backdrop-blur-sm rounded-xl overflow-hidden border border-white/20"
@@ -1861,8 +1368,8 @@ function BonusCard({
                           </DialogHeader>
                           <ScrollArea className="mt-4 max-h-[40vh]">
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                              {bonusData.availableYears &&
-                                bonusData.availableYears.map((year) => (
+                              {data.bonusData.availableYears &&
+                                data.bonusData.availableYears.map((year) => (
                                   <Button
                                     key={year}
                                     variant="outline"
@@ -1874,7 +1381,6 @@ function BonusCard({
                                     onClick={() => {
                                       setSelectedYear(year)
                                       setSelectedMonth(null)
-                                      fetchBonusData(year, null)
                                     }}
                                   >
                                     {year}
@@ -1889,7 +1395,6 @@ function BonusCard({
                               className="text-white/80 hover:text-white hover:bg-white/20"
                               onClick={() => {
                                 setSelectedYear(null)
-                                fetchBonusData(null, null)
                               }}
                             >
                               Limpiar selección
@@ -1933,7 +1438,7 @@ function BonusCard({
                           <div className="mt-4">
                             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((month) => {
-                                const isAvailable = bonusData.availableMonths?.includes(month) || false
+                                const isAvailable = data.bonusData.availableMonths?.includes(month) || false
                                 return (
                                   <Button
                                     key={month}
@@ -1947,7 +1452,6 @@ function BonusCard({
                                     onClick={() => {
                                       if (isAvailable) {
                                         setSelectedMonth(month)
-                                        fetchBonusData(selectedYear, month)
                                       }
                                     }}
                                   >
@@ -1969,7 +1473,6 @@ function BonusCard({
                               className="text-white/80 hover:text-white hover:bg-white/20"
                               onClick={() => {
                                 setSelectedMonth(null)
-                                fetchBonusData(selectedYear, null)
                               }}
                             >
                               Limpiar selección
@@ -2149,17 +1652,17 @@ function BonusCard({
             </div>
           </motion.div>
 
-          {bonusData.deductions && bonusData.deductions.length > 0 ? (
+          {data?.bonusData.deductions && data.bonusData.deductions.length > 0 ? (
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-sm border border-white/10 text-center">
               <div className="flex items-center justify-center">
-              <CheckCircle2 className="h-4 w-4 mr-2 text-green-300" />
-              <span>Sin deducciones - Bono completo</span>
+                <CheckCircle2 className="h-4 w-4 mr-2 text-green-300" />
+                <span>Sin deducciones - Bono completo</span>
               </div>
             </div>
           ) : null}
 
           <AnimatePresence>
-            {showDeductions && bonusData.deductions && bonusData.deductions.length > 0 && (
+            {showDeductions && data?.bonusData.deductions && data.bonusData.deductions.length > 0 && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
@@ -2171,11 +1674,11 @@ function BonusCard({
                   <h6 className="font-medium text-white/90 mb-2 text-sm flex items-center justify-between">
                     <span>Deducciones aplicadas:</span>
                     <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
-                      Total: {formatCurrency(bonusData.deductions.reduce((sum, d) => sum + d.monto, 0))}
+                      Total: {formatCurrency(data.bonusData.deductions.reduce((sum, d) => sum + d.monto, 0))}
                     </span>
                   </h6>
                   <div className="space-y-2">
-                    {bonusData.deductions.map((deduction) => (
+                    {data.bonusData.deductions.map((deduction) => (
                       <motion.div
                         key={deduction.id}
                         className="bg-white/10 rounded-lg p-3 text-xs border border-white/10"
@@ -2494,197 +1997,17 @@ function ScoreCard({
   )
 }
 
+// Main ProgressCards component with React Query
+function ProgressCardsWithProvider({ userCode }: { userCode: string }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ProgressCards userCode={userCode} />
+    </QueryClientProvider>
+  )
+}
+
 // Main ProgressCards component
-export default function ProgressCards({ userCode }: { userCode: string }) {
-  // Valores por defecto para bonusData
-  const defaultBonusData: BonusData = {
-    baseBonus: null,
-    deductionPercentage: null,
-    deductionAmount: null,
-    finalBonus: null,
-    expiresInDays: null,
-    bonusesByYear: null,
-    deductions: null,
-    lastMonthData: null,
-    availableYears: [],
-    availableMonths: [],
-  }
-
-  const [bonusData, setBonusData] = useState<BonusData>(defaultBonusData)
-  const [isLoadingBonus, setIsLoadingBonus] = useState(true)
-  const [bonusError, setBonusError] = useState<string | null>(null)
-  const [monthlyBonusData, setMonthlyBonusData] = useState<
-    {
-      year: number
-      month: number
-      monthName: string
-      bonusValue: number
-      deductionAmount: number
-      finalValue: number
-    }[]
-  >([])
-
-  // Fetch bonus data
-  const fetchBonusData = async () => {
-    try {
-      // Set default values immediately to show something
-      setBonusData({
-        ...defaultBonusData,
-        baseBonus: 130000, // Default value
-        finalBonus: 130000, // Default value
-        deductionPercentage: 0,
-        deductionAmount: 0,
-      })
-
-      setIsLoadingBonus(true)
-
-      // Cargar datos de bonos desde la API
-      const response = await fetch(`/api/user/bonuses?codigo=${userCode}&_t=${Date.now()}`)
-
-      if (!response.ok) {
-        throw new Error(`Error del servidor: ${response.status} ${response.statusText}`)
-      }
-
-      // Si la API existe, usar los datos reales
-      const data = await response.json()
-      console.log("Main component received bonus data:", data)
-
-      if (data.error) {
-        throw new Error(data.error || "Error al cargar los datos de bonos")
-      }
-
-      setBonusData({
-        baseBonus: data.baseBonus || data.summary?.totalProgrammed || 130000,
-        deductionPercentage: data.deductionPercentage || (data.summary ? 100 - data.summary.percentage : 0),
-        deductionAmount:
-          data.deductionAmount ||
-          (data.summary?.totalProgrammed && data.summary?.totalExecuted
-            ? data.summary.totalProgrammed - data.summary.totalExecuted
-            : 0),
-        finalBonus: data.finalBonus || data.summary?.totalExecuted || 130000,
-        expiresInDays: data.expiresInDays || null,
-        bonusesByYear: data.bonusesByYear || {},
-        deductions: data.deductions || [],
-        lastMonthData: data.lastMonthData || null,
-        availableYears: data.availableYears || [],
-        availableMonths: data.availableMonths || [],
-        summary: data.summary || null,
-      })
-
-      // Crear datos mensuales a partir de lastMonthData si está disponible
-      if (data.lastMonthData && data.lastMonthData.year) {
-        const monthlyData = [
-          {
-            year: data.lastMonthData.year,
-            month: data.lastMonthData.month,
-            monthName: data.lastMonthData.month || getMonthName(data.lastMonthData.month),
-            bonusValue: data.lastMonthData.bonusValue || data.baseBonus || data.summary?.totalProgrammed || 130000,
-            deductionAmount: data.lastMonthData.deductionAmount || 0,
-            finalValue: data.lastMonthData.finalValue || data.finalBonus || data.summary?.totalExecuted || 130000,
-          },
-        ]
-        setMonthlyBonusData(monthlyData)
-      } else {
-        // Set default monthly data if none is available
-        const currentDate = new Date()
-        setMonthlyBonusData([
-          {
-            year: currentDate.getFullYear(),
-            month: currentDate.getMonth() + 1,
-            monthName: getMonthName(currentDate.getMonth() + 1),
-            bonusValue: 130000,
-            deductionAmount: 0,
-            finalValue: 130000,
-          },
-        ])
-      }
-
-      setBonusError(null)
-    } catch (err) {
-      console.error("Error fetching bonus data:", err)
-      setBonusError(err instanceof Error ? err.message : "Error desconocido")
-
-      // Set default values in case of error
-      const currentDate = new Date()
-      setBonusData({
-        ...defaultBonusData,
-        baseBonus: 130000,
-        finalBonus: 130000,
-        deductionPercentage: 0,
-        deductionAmount: 0,
-      })
-
-      setMonthlyBonusData([
-        {
-          year: currentDate.getFullYear(),
-          month: currentDate.getMonth() + 1,
-          monthName: getMonthName(currentDate.getMonth() + 1),
-          bonusValue: 130000,
-          deductionAmount: 0,
-          finalValue: 130000,
-        },
-      ])
-    } finally {
-      setIsLoadingBonus(false)
-    }
-  }
-
-  useEffect(() => {
-    // Set default values immediately
-    const currentDate = new Date()
-    setBonusData({
-      ...defaultBonusData,
-      baseBonus: 130000,
-      finalBonus: 130000,
-      deductionPercentage: 0,
-      deductionAmount: 0,
-      lastMonthData: {
-        year: currentDate.getFullYear(),
-        month: currentDate.getMonth() + 1,
-        monthName: getMonthName(currentDate.getMonth() + 1),
-        bonusValue: 130000,
-        deductionAmount: 0,
-        finalValue: 130000,
-      },
-    })
-
-    setMonthlyBonusData([
-      {
-        year: currentDate.getFullYear(),
-        month: currentDate.getMonth() + 1,
-        monthName: getMonthName(currentDate.getMonth() + 1),
-        bonusValue: 130000,
-        deductionAmount: 0,
-        finalValue: 130000,
-      },
-    ])
-
-    // Then fetch the real data
-    const fetchBonusDataWrapper = async () => {
-      if (userCode) {
-        try {
-          await fetchBonusData()
-        } catch (error) {
-          console.error("Error in fetchBonusDataWrapper:", error)
-          // Ensure loading state is set to false even if fetchBonusData fails
-          setIsLoadingBonus(false)
-        }
-      } else {
-        // If no userCode, set loading to false
-        setIsLoadingBonus(false)
-      }
-    }
-
-    fetchBonusDataWrapper()
-
-    // Add a safety timeout to ensure loading state is never stuck
-    const safetyTimeout = setTimeout(() => {
-      setIsLoadingBonus(false)
-    }, 10000) // 10 seconds max loading time
-
-    return () => clearTimeout(safetyTimeout)
-  }, [userCode])
-
+function ProgressCards({ userCode }: { userCode: string }) {
   // Debug panel for troubleshooting
   const DebugPanel = () => {
     if (!DEBUG_MODE) return null
@@ -2698,7 +2021,8 @@ export default function ProgressCards({ userCode }: { userCode: string }) {
             size="sm"
             className="h-6 text-xs"
             onClick={() => {
-              fetchBonusData()
+              queryClient.invalidateQueries({ queryKey: ["kilometers"] })
+              queryClient.invalidateQueries({ queryKey: ["bonuses"] })
               console.log("Manual refresh triggered from debug panel")
             }}
           >
@@ -2707,30 +2031,19 @@ export default function ProgressCards({ userCode }: { userCode: string }) {
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <h4 className="text-gray-400 mb-1">Bonus Data:</h4>
-            <pre className="bg-gray-900 p-2 rounded overflow-auto max-h-40">
-              {JSON.stringify(
-                {
-                  baseBonus: bonusData.baseBonus,
-                  finalBonus: bonusData.finalBonus,
-                  deductionAmount: bonusData.deductionAmount,
-                  isLoading: isLoadingBonus,
-                  error: bonusError,
-                  availableYears: bonusData.availableYears,
-                  availableMonths: bonusData.availableMonths,
-                },
-                null,
-                2,
-              )}
-            </pre>
-          </div>
-          <div>
-            <h4 className="text-gray-400 mb-1">API Info:</h4>
+            <h4 className="text-gray-400 mb-1">Cache Info:</h4>
             <div className="bg-gray-900 p-2 rounded">
               <p>User Code: {userCode || "Not set"}</p>
-              <p>API URL: {`/api/user/bonuses?codigo=${userCode}`}</p>
-              <p>Loading: {isLoadingBonus ? "Yes" : "No"}</p>
-              <p>Error: {bonusError || "None"}</p>
+              <p>Kilometers Cache: {queryClient.getQueryState(["kilometers", userCode])?.status || "unknown"}</p>
+              <p>Bonuses Cache: {queryClient.getQueryState(["bonuses", userCode])?.status || "unknown"}</p>
+            </div>
+          </div>
+          <div>
+            <h4 className="text-gray-400 mb-1">React Query:</h4>
+            <div className="bg-gray-900 p-2 rounded">
+              <p>Cache Time: 10 minutes</p>
+              <p>Stale Time: 5 minutes</p>
+              <p>Auto Refetch: Disabled</p>
             </div>
           </div>
         </div>
@@ -2743,19 +2056,11 @@ export default function ProgressCards({ userCode }: { userCode: string }) {
       <DebugPanel />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {userCode && <KilometersCard userCode={userCode} />}
-
-        {userCode && (
-          <BonusCard
-            userCode={userCode}
-            bonusData={bonusData}
-            lastMonthData={bonusData.lastMonthData || null}
-            isLoading={isLoadingBonus}
-            monthlyBonusData={monthlyBonusData}
-          />
-        )}
-
+        {userCode && <BonusCard userCode={userCode} />}
         {/* El componente ScoreCard se añadirá cuando tenga su propia API */}
       </div>
     </>
   )
 }
+
+export default ProgressCardsWithProvider
