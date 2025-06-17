@@ -4,6 +4,17 @@ import NodeCache from "node-cache"
 
 const cache = new NodeCache({ stdTTL: 300 }) // 5 minutos de caché
 
+// Verificar que las variables de entorno estén definidas
+if (!process.env.DB_HOST || !process.env.DB_USER || !process.env.DB_PASSWORD || !process.env.DB_NAME) {
+  console.error('Variables de entorno de base de datos no configuradas correctamente para kilómetros:', {
+    host: process.env.DB_HOST ? 'Definido' : 'No definido',
+    user: process.env.DB_USER ? 'Definido' : 'No definido',
+    password: process.env.DB_PASSWORD ? 'Definido' : 'No definido',
+    database: process.env.DB_NAME ? 'Definido' : 'No definido',
+    port: process.env.DB_PORT || '3306 (default)'
+  });
+}
+
 // Configuración del pool de conexiones
 const pool = createPool({
   host: process.env.DB_HOST,
@@ -14,7 +25,11 @@ const pool = createPool({
   waitForConnections: true,
   connectionLimit: 15,
   idleTimeout: 30000, // 30 segundos de inactividad
-  queueLimit: 0
+  queueLimit: 0,
+  // Aumentar el tiempo de espera para la conexión
+  connectTimeout: 60000, // 60 segundos
+  // Configuración de SSL si es necesario
+  ssl: process.env.DB_SSL === 'true' ? {} : undefined
 })
 
 class DataRepository {
@@ -166,27 +181,60 @@ export async function GET(request: Request) {
   const year = yearParam ? parseInt(yearParam) : undefined
   const month = monthParam ? parseInt(monthParam) : undefined
 
+  console.log(`Solicitud de kilómetros para usuario: ${userCode}, año: ${year || 'todos'}, mes: ${month || 'todos'}`);
+
   const cacheKey = `${userCode}-${year}-${month}`
   const cached = cache.get(cacheKey)
-  if (cached) return NextResponse.json(cached)
+  if (cached) {
+    console.log('Datos obtenidos de caché');
+    return NextResponse.json(cached);
+  }
 
   try {
-    const repo = new DataRepository()
+    console.log('Creando repositorio de datos...');
+    const repo = new DataRepository();
+    
+    console.log('Obteniendo datos de kilómetros...');
     const [rawData, years, months] = await Promise.all([
       repo.getVariables({ userCode, year, month }),
       repo.getAvailableYears(userCode !== 'all' ? userCode : undefined),
       repo.getAvailableMonths(userCode !== 'all' ? userCode : undefined, year)
-    ])
+    ]);
+    
+    console.log(`Datos obtenidos: ${rawData.length} registros, ${years.length} años, ${months.length} meses`);
+    
+    if (!rawData || rawData.length === 0) {
+      console.error('No se encontraron datos de kilómetros para los parámetros especificados');
+      return NextResponse.json(
+        { 
+          success: true, 
+          message: 'No se encontraron datos de kilómetros',
+          details: `No hay datos para el usuario ${userCode}${year ? `, año ${year}` : ''}${month ? `, mes ${month}` : ''}`,
+          data: [],
+          summary: {
+            totalProgrammed: '0',
+            totalExecuted: '0',
+            percentage: 0
+          },
+          availableYears: [],
+          availableMonths: []
+        }
+      )
+    }
 
-    const processedData = Object.values(processData(rawData))
+    console.log('Procesando datos...');
+    const processedData = Object.values(processData(rawData));
+    console.log(`Datos procesados: ${processedData.length} registros`);
     
     const totalProgrammed = processedData
       .reduce((sum: number, item: any) => sum + item.valor_programacion, 0)
-      .toFixed(2)
+      .toFixed(2);
 
     const totalExecuted = processedData
       .reduce((sum: number, item: any) => sum + item.valor_ejecucion, 0)
-      .toFixed(2)
+      .toFixed(2);
+
+    console.log(`Totales calculados - Programado: ${totalProgrammed}, Ejecutado: ${totalExecuted}`);
 
     const responseData = {
       success: true,
@@ -200,21 +248,31 @@ export async function GET(request: Request) {
       },
       availableYears: years,
       availableMonths: months
-    }
+    };
 
-    cache.set(cacheKey, responseData)
-    return NextResponse.json(responseData)
+    console.log('Guardando datos en caché...');
+    cache.set(cacheKey, responseData);
+    
+    console.log('Enviando respuesta...');
+    return NextResponse.json(responseData);
 
   } catch (error: any) {
-    console.error("Error:", error)
+    console.error("Error al obtener datos de kilómetros:", error);
+    
     return NextResponse.json(
       {
         success: false,
-        message: "Error interno del servidor",
+        message: "Error al obtener datos de kilómetros",
+        details: "Verifica la configuración de la base de datos y que las tablas existan",
+        connectionInfo: {
+          host: process.env.DB_HOST ? `${process.env.DB_HOST.substring(0, 3)}...` : 'No definido',
+          database: process.env.DB_NAME || 'No definido',
+          port: process.env.DB_PORT || '3306 (default)'
+        },
         error: process.env.NODE_ENV === "development" ? error.message : undefined,
       },
       { status: 500 }
-    )
+    );
   }
 }
 

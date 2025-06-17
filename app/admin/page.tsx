@@ -1,40 +1,86 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { useAuth } from "@/hooks/use-auth"
-import AdminDashboard from "@/components/admin/admin-dashboard"
+import React, { useState } from 'react';
+import Sidebar from '@/components/Sidebar';
+import Dashboard from '@/components/Dashboard';
+import Bonos from '@/components/bonos/bonos';
+import { KmTracking } from '@/components/kilometros/km-tracking';
+import OperatorRankings from '@/components/operadores/operator-rankings';
+import ActiveUsersSection from '@/components/users/ActiveUsers';
 
-export default function AdminPage() {
-  const [isLoading, setIsLoading] = useState(true)
-  const { user } = useAuth()
-  const router = useRouter()
+function App() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activeView, setActiveView] = useState('dashboard');
 
-  useEffect(() => {
-    // Check if user is logged in and is an admin
-    if (!user) {
-      router.push("/")
-      return
+  const renderContent = () => {
+    switch (activeView) {
+      case 'users':
+        return <ActiveUsersSection />;
+      case 'bonuses':
+        return <Bonos />;
+      case 'kilometers':
+        return <KmTracking />;
+      case 'rankings':
+        return <OperatorRankings />;
+      default:
+        return <Dashboard />;
     }
+  };
 
-    if (user.cedula !== "admin") {
-      router.push("/")
-      return
+  const getPageTitle = () => {
+    switch (activeView) {
+      case 'users':
+        return 'Usuarios Activos';
+      case 'bonuses':
+        return 'Gestión de Bonos';
+      case 'kilometers':
+        return 'Seguimiento de Kilómetros';
+      case 'rankings':
+        return 'Rankings de Operadores';
+      default:
+        return 'Dashboard Analytics';
     }
+  };
 
-    setIsLoading(false)
-  }, [user, router])
+  const getPageSubtitle = () => {
+    switch (activeView) {
+      case 'users':
+        return 'Monitoreo en tiempo real de la actividad y productividad del equipo';
+      case 'bonuses':
+        return 'Administra y consulta los bonos y afectaciones del personal';
+      case 'kilometers':
+        return 'Monitoreo de kilómetros programados vs ejecutados con análisis de confiabilidad';
+      case 'rankings':
+        return 'Clasificación de operadores basada en rendimiento de bonos y kilómetros';
+      default:
+        return 'Monitorea el rendimiento y actividad de usuarios en tiempo real';
+    }
+  };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-green-100">
-        <div className="flex flex-col items-center">
-          <div className="w-16 h-16 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mb-4"></div>
-          <p className="text-green-700 font-medium">Cargando panel de administración...</p>
-        </div>
+  return (
+    <div className="min-h-screen bg-gray-25">
+      {/* Sidebar */}
+      <Sidebar 
+        collapsed={sidebarCollapsed} 
+        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        activeView={activeView}
+        onViewChange={setActiveView}
+      />
+
+      {/* Main Content */}
+      <div className={`
+        transition-all duration-500 ease-out
+        ${sidebarCollapsed ? 'ml-20' : 'ml-80'}
+      `}>
+        {/* Sin header */}
+
+        {/* Dashboard Content */}
+        <main className="p-8">
+          {renderContent()}
+        </main>
       </div>
-    )
-  }
-
-  return <AdminDashboard />
+    </div>
+  );
 }
+
+export default App;

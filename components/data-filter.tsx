@@ -490,25 +490,6 @@ export default function DataFilter() {
                 </div>
               </div>
             </div>
-
-            <div className="bg-gradient-to-br from-green-50 to-green-100/40 p-4 rounded-2xl border border-green-100/40 shadow-sm transition-all group hover:shadow-md relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-green-100/40 rounded-full -translate-y-1/2 translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-green-100/30 rounded-full blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 relative z-10">
-                <div className="bg-green-400/10 p-2 sm:p-2.5 rounded-lg sm:rounded-xl hidden sm:block">
-                  <CalendarIcon className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-gray-500 text-xs">Viajes</p>
-                  {isLoading ? (
-                    <div className="h-6 w-16 bg-gray-200 animate-pulse rounded mt-1"></div>
-                  ) : (
-                    <p className="text-gray-800 font-bold text-xl">{filteredData?.totalActivities || "0"}</p>
-                  )}
-                </div>
-              </div>
-            </div>
           </motion.div>
 
           {/* Chart for kilometers */}

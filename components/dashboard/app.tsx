@@ -487,7 +487,6 @@ export default function MedicalApp() {
 
               {/* Tab Content */}
               <div
-                className={`${isMobile ? "pb-6 px-6" : "bg-white/80 backdrop-blur-lg rounded-3xl shadow-xl overflow-hidden border border-green-100 p-6"} transform-gpu`}
               >
                 <Suspense fallback={<TabContentSkeleton />}>
 

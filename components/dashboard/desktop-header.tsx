@@ -19,7 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useState, useEffect } from "react"
-import { LogoutConfirmation } from "../logout-confirmation"
+import LogoutConfirmation from "../logout-confirmation"
 import { useUserCategory } from "../user-category"
 import { useProfileData } from "@/hooks/use-profile-data"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -253,10 +253,6 @@ export default function DesktopHeader({
 
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap gap-2">
-                  <Badge className="bg-white/20 border-0 backdrop-blur-sm text-white hover:bg-white/30 transition-colors">
-                    <Star className="h-3.5 w-3.5 mr-1.5 text-white" />
-                    Operador Destacado
-                  </Badge>
 
                   {/* Categoría dinámica basada en los datos reales */}
                   <motion.div
@@ -276,90 +272,13 @@ export default function DesktopHeader({
                     }`}
                   >
                     <div
-                      className={`p-1 rounded-full ${
-                        finalCategory === "Oro"
-                          ? "bg-yellow-500/20"
-                          : finalCategory === "Plata"
-                            ? "bg-gray-500/20"
-                            : finalCategory === "Bronce"
-                              ? "bg-amber-600/20"
-                              : finalCategory === "Mejorar"
-                                ? "bg-blue-500/20"
-                                : finalCategory === "Taller Conciencia"
-                                  ? "bg-red-500/20"
-                                  : "bg-green-500/20"
-                      }`}
+                      
                     >
-                      <Award
-                        className={`h-4 w-4 ${
-                          finalCategory === "Oro"
-                            ? "text-yellow-300"
-                            : finalCategory === "Plata"
-                              ? "text-gray-300"
-                              : finalCategory === "Bronce"
-                                ? "text-amber-500"
-                                : finalCategory === "Mejorar"
-                                  ? "text-blue-400"
-                                  : finalCategory === "Taller Conciencia"
-                                    ? "text-red-400"
-                                    : "text-emerald-400"
-                        }`}
-                      />
+                      
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-white/80 text-xs font-light">Categoría</span>
-                      <span className="text-white font-semibold">{finalCategory}</span>
-                    </div>
-                    {finalCategory === "Oro" && (
-                      <motion.div
-                        className="absolute inset-0 rounded-xl opacity-30"
-                        animate={{
-                          boxShadow: [
-                            "0 0 0px rgba(234, 179, 8, 0)",
-                            "0 0 8px rgba(234, 179, 8, 0.5)",
-                            "0 0 0px rgba(234, 179, 8, 0)",
-                          ],
-                        }}
-                        transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
-                      />
-                    )}
                   </motion.div>
-
-                  <Badge className="bg-white/20 border-0 backdrop-blur-sm text-white hover:bg-white/30 transition-colors">
-                    <Route className="h-3.5 w-3.5 mr-1.5" />
-                    50+ Rutas
-                  </Badge>
                 </div>
               </div>
-
-              {/* Información profesional */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/10">
-                <div className="flex items-center gap-2 mb-2">
-                  <Shield className="h-4 w-4 text-white/90" />
-                  <h4 className="text-white/90 text-sm font-medium">Perfil Profesional</h4>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-full bg-white/10">
-                      <Zap className="h-3.5 w-3.5 text-white/80" />
-                    </div>
-                    <div>
-                      <p className="text-white/60 text-xs">Experiencia</p>
-                      <p className="text-white text-sm font-medium">8+ años</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-full bg-white/10">
-                      <Star className="h-3.5 w-3.5 text-white/80" />
-                    </div>
-                    <div>
-                      <p className="text-white/60 text-xs">Valoración</p>
-                      <p className="text-white text-sm font-medium">Excelente</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <Button
                 variant="ghost"
                 className="text-white bg-white/10 hover:bg-white/20 rounded-xl border border-white/10 flex items-center gap-2 text-sm"

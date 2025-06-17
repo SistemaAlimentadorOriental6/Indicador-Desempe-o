@@ -1,0 +1,68 @@
+export interface Operator {
+    id: string | number
+    name: string
+    document?: string
+    avatar?: string
+    position: string
+    phone?: string
+    joinDate: string | null
+    bonus: {
+      percentage: number
+      total: number
+      category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
+      trend: "up" | "down" | "stable"
+      date: string | null
+    }
+    km: {
+      percentage: number
+      total: number
+      total_programado?: number
+      total_ejecutado?: number
+      category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
+      trend: "up" | "down" | "stable"
+      date: string | null
+    }
+    efficiency: number
+    category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
+    rank: number
+    weeklyPerformance: number[]
+    department?: string
+    monthlyGoal?: number
+    lastUpdate?: string
+    trend?: "up" | "down" | "stable"
+    streak: number
+    consistency?: number
+    achievements?: string[]
+    profileImage?: string
+    // Información sobre el filtro de tiempo activo para este operador
+    timeFilter?: {
+      type: TimeFilterType
+      value?: string | number | null
+    }
+  }
+  
+  export type FilterType = "all" | "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
+  export type SortType = "rank" | "bonus" | "km" | "efficiency"
+  export type ViewMode = "grid" | "list"
+  export type SortOrder = "asc" | "desc"
+  export type TimeFilterType = "global" | "year" | "month"
+  // Alias de TimeFilterType para mantener compatibilidad con componentes existentes
+  export type TimeFilterOption = TimeFilterType;
+  export type TimeFilter = {
+    type: TimeFilterType;
+    value?: string | number;
+  }
+  
+  export interface CategoryStats {
+    [key: string]: number
+  }
+  
+  export interface CategoryColors {
+    bg: string
+    text: string
+    border: string
+    bgLight: string
+    shadow: string
+    ring: string
+  }
+  

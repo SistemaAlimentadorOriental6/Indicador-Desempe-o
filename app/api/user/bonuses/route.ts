@@ -82,7 +82,8 @@ export async function GET(request: NextRequest) {
 
     // Construir la consulta base para obtener novedades
     let query = `
-      SELECT id, fecha_inicio_novedad, fecha_fin_novedad, codigo_empleado, codigo_factor, observaciones, 
+      SELECT id, fecha_inicio_novedad, fecha_fin_novedad, codigo_empleado, codigo_factor, 
+             observaciones, -- Asegurarnos de seleccionar el campo observaciones completo sin truncar
              DATEDIFF(IFNULL(fecha_fin_novedad, CURDATE()), fecha_inicio_novedad) + 1 as dias_novedad
       FROM novedades
       WHERE codigo_empleado = ?
@@ -104,8 +105,11 @@ export async function GET(request: NextRequest) {
     query += " ORDER BY fecha_inicio_novedad DESC"
 
     // Ejecutar la consulta
-    const [rows] = await connection.execute(query, queryParams)
-    const novedades = rows as any[]
+    const [novedadesRows] = await connection.execute(query, queryParams)
+    
+    // Log para depurar los valores de observaciones
+    console.log('Novedades obtenidas de la base de datos:', JSON.stringify(novedadesRows, null, 2))
+    const novedades = novedadesRows as any[]
 
     // Modificar la respuesta de la API para asegurar que siempre incluya el campo success
     // Si no hay novedades, devolver un mensaje claro
@@ -172,6 +176,7 @@ export async function GET(request: NextRequest) {
       dias: number
       porcentaje: number | string
       monto: number
+      observaciones?: string // Agregar campo observaciones
     }> = []
 
     let totalDeductionAmount = 0
@@ -185,42 +190,49 @@ export async function GET(request: NextRequest) {
         let deductionPercentage: number | string = 0
 
         if (factorValue === "Día") {
-          // Calcular deducción basada en días
           const dias = novedad.dias_novedad || 1
           deductionAmount = DAILY_DEDUCTION * dias
           deductionPercentage = `${dias} día(s)`
         } else {
-          // Calcular deducción basada en porcentaje
           deductionAmount = (baseBonus * (factorValue as number)) / 100
           deductionPercentage = factorValue as number
         }
 
-        // Añadir a la lista de deducciones
-        deductions.push({
+        // Log para depurar los valores de observaciones de cada novedad
+        console.log(`Novedad ID ${novedad.id} - Observaciones originales de la BD: "${novedad.observaciones}"`)
+        
+        // Obtener el concepto basado en el código de factor
+        const concepto = getConceptoByCode(codigoFactor)
+        
+        // Crear el objeto deduction con las observaciones originales de la base de datos
+        const deduction = {
           id: novedad.id,
           codigo: codigoFactor,
-          concepto: getConceptoByCode(codigoFactor),
+          concepto: concepto,
           fechaInicio: novedad.fecha_inicio_novedad,
           fechaFin: novedad.fecha_fin_novedad,
           dias: novedad.dias_novedad || 1,
           porcentaje: deductionPercentage,
           monto: deductionAmount,
-        })
+          // Usar directamente las observaciones de la base de datos
+          observaciones: novedad.observaciones || concepto
+        }
+        
+        // Log del objeto deduction completo
+        console.log(`Deduction creado para ID ${novedad.id}:`, JSON.stringify(deduction, null, 2))
+        
+        deductions.push(deduction)
 
         totalDeductionAmount += deductionAmount
       }
     })
 
-    // Limitar la deducción total al valor del bono
     totalDeductionAmount = Math.min(totalDeductionAmount, baseBonus)
 
-    // Calcular el porcentaje total de deducción
     const deductionPercentage = Math.round((totalDeductionAmount / baseBonus) * 100)
 
-    // Calcular el valor final del bono después de deducciones
     const finalBonus = baseBonus - totalDeductionAmount
 
-    // Calcular días para expiración (14 días desde la fecha más reciente)
     let expiresInDays = 0
     if (novedades.length > 0) {
       const latestDate = new Date(novedades[0].fecha_inicio_novedad)
@@ -233,9 +245,6 @@ export async function GET(request: NextRequest) {
       expiresInDays = Math.max(0, expiresInDays) // No mostrar días negativos
     }
 
-    // Contar bonos disponibles (los que no han expirado)
-    // Para este caso, consideramos que todos los bonos en el sistema están disponibles
-    // a menos que tengan una fecha de fin que ya haya pasado
     let availableBonuses = 0
     const today = new Date()
 
@@ -246,18 +255,14 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Si no hay bonos disponibles pero hay registros, asumimos que al menos hay 1 bono disponible
     if (availableBonuses === 0 && novedades.length > 0) {
       availableBonuses = 1
     }
-
-    // Asegurarnos de que el total de bonos por año coincida con los bonos disponibles
     const totalBonusByYear = Object.values(bonusesByYear).reduce((sum: number, count: number) => sum + count, 0)
     if (totalBonusByYear > 0 && availableBonuses === 0) {
       availableBonuses = totalBonusByYear
     }
 
-    // Calcular bonos disponibles basados en los bonos por año
     const availableBonusesByYear = bonusesByYear
       ? Object.values(bonusesByYear).reduce((sum, count) => sum + count, 0)
       : 0
@@ -272,21 +277,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (novedades.length > 0) {
-      // Obtener la fecha más reciente
       const latestDate = new Date(novedades[0].fecha_inicio_novedad)
       const latestYear = latestDate.getFullYear()
-      const latestMonth = latestDate.getMonth() + 1 // JavaScript months are 0-based
-
-      // Obtener el valor base del bono para el año de la última novedad
+      const latestMonth = latestDate.getMonth() + 1
       const lastMonthBaseBonus = getBaseBonusForYear(latestYear)
-
-      // Filtrar novedades del último mes
       const lastMonthNovedades = novedades.filter((novedad) => {
         const date = new Date(novedad.fecha_inicio_novedad)
         return date.getFullYear() === latestYear && date.getMonth() + 1 === latestMonth
       })
-
-      // Calcular deducciones específicas del último mes
       let lastMonthDeduction = 0
       lastMonthNovedades.forEach((novedad) => {
         const codigoFactor = novedad.codigo_factor
@@ -301,11 +299,7 @@ export async function GET(request: NextRequest) {
           }
         }
       })
-
-      // Limitar la deducción al valor del bono
       lastMonthDeduction = Math.min(lastMonthDeduction, lastMonthBaseBonus)
-
-      // Obtener el nombre del mes
       const monthNames = [
         "Enero",
         "Febrero",
@@ -331,7 +325,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Añadir lastMonthData a la respuesta
     const response = {
       success: true,
       availableBonuses: availableBonusesByYear,
@@ -343,7 +336,7 @@ export async function GET(request: NextRequest) {
       bonusesByYear,
       deductions,
       data: novedades,
-      lastMonthData, // Añadir información del último mes
+      lastMonthData,
       availableYears,
       availableMonths,
       summary: {
@@ -351,7 +344,7 @@ export async function GET(request: NextRequest) {
         totalProgrammed: baseBonus || 0,
         totalExecuted: finalBonus || 0,
         percentage: baseBonus ? Math.round(((baseBonus - (totalDeductionAmount || 0)) / baseBonus) * 100) : 0,
-        lastMonthFinalValue: lastMonthData.finalValue, // Añadir el valor final del último mes al resumen
+        lastMonthFinalValue: lastMonthData.finalValue,
       },
     }
 
@@ -374,9 +367,10 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Función para obtener el concepto basado en el código
+// Función para obtener el concepto basado en el código de factor
 function getConceptoByCode(codigo: string): string {
   const conceptos: Record<string, string> = {
+    // Códigos numéricos
     "1": "Incapacidad",
     "2": "Ausentismo",
     "3": "Incapacidad > 7 días",
@@ -390,18 +384,55 @@ function getConceptoByCode(codigo: string): string {
     "11": "Día No Remunerado",
     "12": "Retardo por Horas",
     "13": "Día No Remunerado por Horas",
-    DL: "Daño Leve",
-    DG: "Daño Grave",
-    DGV: "Daño Gravísimo",
-    DEL: "Desincentivo Leve",
-    DEG: "Desincentivo Grave",
-    DEGV: "Desincentivo Gravísimo",
-    INT: "Incumplimiento Interno",
-    OM: "Falta Menor",
-    OMD: "Falta MeDía",
-    OG: "Falta Grave",
-    NPD: "No presentar descargo",
+    "DL": "Daño Leve",
+    "DG": "Daño Grave",
+    "DGV": "Daño Gravísimo",
+    "DEL": "Desincentivo Leve",
+    "DEG": "Desincentivo Grave",
+    "DEGV": "Desincentivo Gravísimo",
+    "INT": "Incumplimiento Interno",
+    "OM": "Falta Menor",
+    "OMD": "Falta Media",
+    "OG": "Falta Grave",
+    "NPD": "No presentar descargo",
   }
 
   return conceptos[codigo] || `Código ${codigo}`
+}
+
+
+
+// Función para obtener el porcentaje de descuento basado en el código
+function getDescuentoPorcentaje(codigo: string): number | string {
+  const descuentos: Record<string, number | string> = {
+    // Códigos numéricos
+    "1": 25, // Incapacidad
+    "2": 100, // Ausentismo
+    "3": "Día", // Incapacidad > 7 días
+    "4": "Día", // Calamidad
+    "5": 25, // Retardo
+    "6": "Día", // Renuncia
+    "7": "Día", // Vacaciones
+    "8": "Día", // Suspensión
+    "9": "Día", // No Ingreso
+    "10": 100, // Restricción
+    "11": "Día", // Día No Remunerado
+    "12": 50, // Retardo por Horas
+    "13": 0, // Día No Remunerado por Horas
+
+    // Códigos alfabéticos
+    "DL": 25, // Daño Leve
+    "DG": 50, // Daño Grave
+    "DGV": 100, // Daño Gravísimo
+    "DEL": 25, // Desincentivo Leve
+    "DEG": 50, // Desincentivo Grave
+    "DEGV": 100, // Desincentivo Gravísimo
+    "INT": 25, // Incumplimiento Interno
+    "OM": 25, // Falta Menor
+    "OMD": 50, // Falta Media
+    "OG": 100, // Falta Grave
+    "NPD": 100 // No presentar descargo
+  }
+
+  return descuentos[codigo] || 0
 }
