@@ -672,6 +672,7 @@ export const OperatorRankings: React.FC = () => {
               setFilter={setFilter}
               categoryStats={categoryStats}
               totalOperators={operators.length}
+              operators={filteredOperators}
             />
 
             {/* Operators Display */}
@@ -748,6 +749,7 @@ export const OperatorRankings: React.FC = () => {
             setFilter={setFilter}
             categoryStats={categoryStats}
             totalOperators={operators.length}
+            operators={filteredOperators}
           />
 
           {/* Operators Display */}

@@ -1,6 +1,7 @@
 export interface Operator {
-    id: string | number
+    id: string
     name: string
+    cedula: string
     document?: string
     avatar?: string
     position: string

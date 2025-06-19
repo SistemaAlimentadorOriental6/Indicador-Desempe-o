@@ -111,8 +111,12 @@ export function transformDeductionsToAfectaciones(deductions: DeductionItem[]): 
       porcentajeAfectacion = item.porcentaje || 0
     }
     
-    // Usar directamente los valores de observaciones de la base de datos sin modificarlos
-    const observaciones = item.observaciones || item.concepto || 'Sin observaciones';
+    // Usar el concepto como valor principal para mostrar en la interfaz
+    // Ya que las observaciones suelen venir como undefined según los logs
+    const descripcionMostrar = item.concepto || 'Sin descripción';
+    
+    // Log para verificar los valores que estamos procesando
+    console.log(`transformDeductionsToAfectaciones - ID ${item.id} - Concepto: "${item.concepto}", Observaciones: "${item.observaciones}", Usando: "${descripcionMostrar}"`);
     
     return {
       id: item.id,
@@ -121,14 +125,14 @@ export function transformDeductionsToAfectaciones(deductions: DeductionItem[]): 
       fechaInicioOriginal: fechaInicio,
       fechaFinOriginal: fechaFin,
       cantidadDias,
-      novedad: item.concepto || 'Sin novedad',
-      descripcion: observaciones, // Usar directamente las observaciones sin procesamiento adicional
+      novedad: descripcionMostrar, // Usar el concepto como valor principal
+      descripcion: descripcionMostrar, // Usar el mismo valor para descripción
       porcentajeAfectacion,
       montoDescuento: item.monto || 0,
       estado: 'finalizado' as const,
       tipoIcono: mapCodigoToTipoIcono(item.codigo || ''),
       mes: calcularMes(fechaInicioFormateada),
-      falta: item.concepto || 'Sin clasificar',
+      falta: descripcionMostrar, // Usar el mismo valor para falta
       codigo: item.codigo || ''
     }
   })

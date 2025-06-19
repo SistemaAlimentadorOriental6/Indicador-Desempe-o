@@ -107,9 +107,8 @@ export const TablaAfectaciones: React.FC<TablaAfectacionesProps> = ({ afectacion
                 <td className="p-4 border-r border-gray-100">
                   <div className="bg-gray-50 p-3 rounded-xl">
                     <span className="text-sm text-gray-700 font-medium">
-                      {afectacion.descripcion !== "Sin descripción"
-                        ? afectacion.descripcion
-                        : `Descripción de ${afectacion.falta.toLowerCase()}`}
+                      {/* Mostramos la novedad que ya contiene el concepto */}
+                      {afectacion.novedad || afectacion.falta || "Sin descripción"}
                     </span>
                   </div>
                 </td>

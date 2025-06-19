@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { formatPercentage } from "@/utils/format-utils"
 
 interface WeeklyChartProps {
   data: number[]
@@ -21,7 +22,7 @@ export const WeeklyChart: React.FC<WeeklyChartProps> = ({ data, small = false })
             key={index}
             className={`${small ? "w-1" : "w-2"} bg-gradient-to-t from-primary-200 to-primary-500 rounded-full transition-all duration-500 hover:from-primary-300 hover:to-primary-600`}
             style={{ height: `${Math.max(height, 15)}%` }}
-            title={`Día ${index + 1}: ${value}%`}
+            title={`Día ${index + 1}: ${formatPercentage(value, 2)}`}
           />
         )
       })}

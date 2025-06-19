@@ -68,9 +68,24 @@ const processYearlyBonusData = (apiData: any, year: number): DataPoint[] => {
   const currentDate = new Date()
 
   // Determinar el valor base del bono según el año
-  let baseBonusValue = 130000 // Valor por defecto para 2024 y anteriores
-  if (year === 2025) {
-    baseBonusValue = 142000 // Valor para 2025
+  let baseBonusValue = 122000; // Valor por defecto para años no especificados
+  
+  // Valores consistentes con bonus-config.ts
+  switch (year) {
+    case 2025:
+      baseBonusValue = 142000; // Valor para 2025
+      break;
+    case 2024:
+      baseBonusValue = 135000; // Valor para 2024
+      break;
+    case 2023:
+      baseBonusValue = 128000; // Valor para 2023
+      break;
+    case 2022:
+    case 2021:
+    case 2020:
+      baseBonusValue = 122000; // Valor para 2022, 2021 y 2020
+      break;
   }
 
   // If we have lastMonthData, use it to populate the corresponding month

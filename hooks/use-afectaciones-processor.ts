@@ -37,6 +37,10 @@ export const useAfectacionesProcessor = (persona: PersonaBono) => {
         console.log(`useAfectacionesProcessor - Procesando ${persona.deductions.length} deductions...`)
         console.log('useAfectacionesProcessor - Muestra de deductions:', JSON.stringify(persona.deductions.slice(0, 2), null, 2))
         
+        // Verificar si hay conceptos en las deducciones
+        const conceptosPresentes = persona.deductions.filter(d => d.concepto).length;
+        console.log(`useAfectacionesProcessor - Deducciones con concepto: ${conceptosPresentes} de ${persona.deductions.length}`)
+        
         // Verificar si las deductions tienen el formato correcto para procesar fechas
         // IMPORTANTE: No modificar las observaciones originales que vienen de la base de datos
         const deductionsConDatos = persona.deductions.map(item => {

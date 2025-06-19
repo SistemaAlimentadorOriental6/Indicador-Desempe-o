@@ -131,14 +131,49 @@ export function processOperatorsData(operators: Operator[], filterType: TimeFilt
     // Redondear a 2 decimales
     newPercentage = Math.round(newPercentage * 100) / 100;
     
-    // Crear una copia del operador con los valores actualizados
+    // Calcular eficiencia ponderada que considera TANTO el porcentaje como la cantidad total
+    // Esto evita que personas con pocos km programados pero 100% de cumplimiento estén por encima
+    // de personas con muchos más km ejecutados pero con un porcentaje un poco menor
+    
+    // Encontrar el valor máximo de kilómetros en toda la flota para normalizar
+    const maxKmEnFlota = Math.max(...operators.map(op => op.km.total_ejecutado || 0));
+    
+    // Peso del porcentaje en la eficiencia final (0.6 = 60% del peso)
+    const pesoPorcentaje = 0.6;
+    // Peso de los kilómetros totales en la eficiencia final (0.4 = 40% del peso)
+    const pesoKilometros = 0.4;
+    
+    // Normalizar los kilómetros ejecutados (0-100)
+    const kmNormalizados = maxKmEnFlota > 0 ? (totalEjecutado / maxKmEnFlota) * 100 : 0;
+    
+    // Calcular eficiencia ponderada (combinación de porcentaje y cantidad)
+    const eficienciaPonderada = (newPercentage * pesoPorcentaje) + (kmNormalizados * pesoKilometros);
+    const eficienciaRedondeada = Math.round(eficienciaPonderada * 10) / 10; // Redondear a 1 decimal
+    
+    // Determinar la categoría basada en la eficiencia ponderada
+    let categoria: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia";
+    if (eficienciaRedondeada >= 95) {
+      categoria = "Oro";
+    } else if (eficienciaRedondeada >= 85) {
+      categoria = "Plata";
+    } else if (eficienciaRedondeada >= 75) {
+      categoria = "Bronce";
+    } else if (eficienciaRedondeada >= 60) {
+      categoria = "Mejorar";
+    } else {
+      categoria = "Taller Conciencia";
+    }
+    
+    // Devolver una copia del operador con los datos actualizados
     return {
       ...operator,
       km: {
         ...operator.km,
-        percentage: newPercentage,
-        total: totalEjecutado // El total mostrado debe ser el ejecutado
-      }
+        percentage: newPercentage
+      },
+      // Actualizar la eficiencia general y la categoría del operador
+      efficiency: eficienciaRedondeada,
+      category: categoria
     };
   });
 };
@@ -219,24 +254,59 @@ export const filterAndSortOperators = (
   
   // Devolver el array filtrado y ordenado
   return filtered.sort((a, b) => {
-      let aValue, bValue
+      let aValue, bValue;
+      
+      // Función auxiliar para garantizar que comparamos números válidos
+      const ensureNumber = (val: any): number => {
+        if (val === null || val === undefined) return 0;
+        if (typeof val === 'string') {
+          // Convertir cadenas a números, reemplazando comas por puntos (formato europeo)
+          return parseFloat(val.replace(',', '.')) || 0;
+        }
+        return typeof val === 'number' ? val : 0;
+      };
+      
       switch (sortBy) {
         case "bonus":
-          aValue = typeof a.bonus.percentage === 'number' ? a.bonus.percentage : 0
-          bValue = typeof b.bonus.percentage === 'number' ? b.bonus.percentage : 0
-          break
+          // Para bonos, ordenar primero por porcentaje y luego por total
+          aValue = ensureNumber(a.bonus?.percentage);
+          bValue = ensureNumber(b.bonus?.percentage);
+          
+          // Si los porcentajes son iguales, ordenar por total
+          if (aValue === bValue) {
+            aValue = ensureNumber(a.bonus?.total);
+            bValue = ensureNumber(b.bonus?.total);
+          }
+          break;
+          
         case "km":
-          aValue = typeof a.km.percentage === 'number' ? a.km.percentage : 0
-          bValue = typeof b.km.percentage === 'number' ? b.km.percentage : 0
-          break
+          // Para kilómetros, ordenar por total_ejecutado SIEMPRE
+          aValue = ensureNumber(a.km?.total_ejecutado);
+          bValue = ensureNumber(b.km?.total_ejecutado);
+          
+          // Log para depuración (usar nombre propiamente para el tipo Operator)
+          const nombreA = typeof a.name === 'string' ? a.name : 
+                        (a as any).nombre || 'Sin nombre';
+          const nombreB = typeof b.name === 'string' ? b.name : 
+                        (b as any).nombre || 'Sin nombre';
+          console.log(`Comparando KM: ${nombreA}: ${aValue} vs ${nombreB}: ${bValue}`); 
+          break;
+          
         case "efficiency":
-          aValue = a.efficiency
-          bValue = b.efficiency
-          break
-        default:
-          aValue = a.rank || 999
-          bValue = b.rank || 999
+          // Para eficiencia, usar el valor directo
+          aValue = ensureNumber(a.efficiency);
+          bValue = ensureNumber(b.efficiency);
+          break;
+          
+        default: // Ranking
+          // Para ranking, usar el campo rank (menor es mejor)
+          aValue = ensureNumber(a.rank) || 999;
+          bValue = ensureNumber(b.rank) || 999;
+          // Invertir el orden para ranking porque menor es mejor
+          return sortOrder === "desc" ? aValue - bValue : bValue - aValue;
       }
-      return sortOrder === "desc" ? bValue - aValue : aValue - bValue
+      
+      // Para los demás criterios, mayor es mejor
+      return sortOrder === "desc" ? bValue - aValue : aValue - bValue;
     })
 }

@@ -62,8 +62,10 @@ try {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const page = parseInt(searchParams.get('page') || '1')
-  const pageSize = parseInt(searchParams.get('pageSize') || '100') // Aumentamos el tamaño por defecto
-  const cacheKey = `users-${page}-${pageSize}`
+  const pageSize = parseInt(searchParams.get('pageSize') || '100')
+  const cedula = searchParams.get('cedula')
+
+  const cacheKey = cedula ? `user-${cedula}` : `users-${page}-${pageSize}`
   
   // Verificar si tenemos datos en caché
   const cachedData = cache.get(cacheKey)
@@ -102,30 +104,40 @@ export async function GET(request: Request) {
     
     try {
       console.log('Ejecutando consulta para contar usuarios...');
-      // Query to get total count of users
-      const [countResult] = await connection.execute(
-        `SELECT COUNT(*) as total FROM operadores_sao6`
-      );
-      console.log('Resultado de conteo:', countResult);
-      
-      // Type assertion to handle the result properly
-      const countData = Array.isArray(countResult) && countResult.length > 0 ? countResult[0] : { total: 0 }
-      const totalUsers = (countData as any).total || 0
-      const totalPages = Math.ceil(totalUsers / validPageSize)
-      
-      console.log('Ejecutando consulta para obtener detalles de usuarios...');
-      // Query to get users with their details
-      const [usersResult] = await connection.execute(
-        `SELECT 
+      let query = `
+        SELECT 
           o.codigo AS codigo,
           o.nombre AS nombre,
           o.cedula AS cedula,
           o.telefono AS telefono
         FROM operadores_sao6 o
-        ORDER BY o.nombre
-        LIMIT ? OFFSET ?`,
-        [validPageSize, offset]
-      );
+      `
+      const queryParams: (string | number)[] = []
+
+      if (cedula) {
+        query += ' WHERE o.cedula = ?'
+        queryParams.push(cedula)
+      } else {
+        query += ' ORDER BY o.nombre LIMIT ? OFFSET ?'
+        queryParams.push(validPageSize, offset)
+      }
+
+      const [usersResult] = await connection.execute(query, queryParams)
+
+      let totalUsers = 0
+      let totalPages = 0
+
+      if (!cedula) {
+        const [countResult] = await connection.execute(
+          `SELECT COUNT(*) as total FROM operadores_sao6`
+        )
+        const countData = Array.isArray(countResult) && countResult.length > 0 ? countResult[0] : { total: 0 }
+        totalUsers = (countData as any).total || 0
+        totalPages = Math.ceil(totalUsers / validPageSize)
+      } else {
+        totalUsers = (usersResult as any[]).length
+        totalPages = totalUsers > 0 ? 1 : 0
+      }
       console.log(`Obtenidos ${usersResult ? (usersResult as any[]).length : 0} usuarios`);
       
       // Liberar la conexión de vuelta al pool

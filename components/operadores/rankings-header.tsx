@@ -2,6 +2,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import { formatNumber, formatPercentage } from "@/utils/format-utils"
 
 type FilterOption = 'global' | 'year' | 'month';
 type FilterProps = {

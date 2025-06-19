@@ -4,6 +4,7 @@ import type React from "react"
 import { Eye, Flame } from "lucide-react"
 import { getCategoryIcon, getCategoryColor, getTrendIcon, getRankTextColor } from "@/utils/operator-utils"
 import type { Operator } from "@/types/operator-types"
+import { formatNumber, formatPercentage } from "@/utils/format-utils"
 
 interface OperatorListItemProps {
   operator: Operator
@@ -78,9 +79,9 @@ export const OperatorListItem: React.FC<OperatorListItemProps> = ({ operator, ra
                      '(2025)'}
             </p>
             <p className="font-bold text-lg text-gray-900">
-              {typeof operator.bonus.percentage === 'number' ? operator.bonus.percentage.toFixed(2) : parseFloat(String(operator.bonus.percentage || 0)).toFixed(2)}%
+              {formatPercentage(operator.bonus.percentage, 2)}
             </p>
-            <p className="text-xs text-gray-600">$ {operator.bonus.total.toLocaleString('es-CO')}</p>
+            <p className="text-xs text-gray-600">$ {formatNumber(operator.bonus.total, true, 0)}</p>
             <div className="w-16 bg-gray-200 rounded-full h-1.5 mt-1">
               <div
                 className="bg-gradient-to-r from-primary-400 to-primary-600 h-1.5 rounded-full transition-all duration-1000"
@@ -91,7 +92,7 @@ export const OperatorListItem: React.FC<OperatorListItemProps> = ({ operator, ra
 
           <div className="text-center">
             <p className="text-sm text-gray-500 mb-1">Kilómetros</p>
-            <p className="font-bold text-lg text-gray-900">{typeof operator.km.percentage === 'number' ? operator.km.percentage.toFixed(2) : parseFloat(String(operator.km.percentage || 0)).toFixed(2)}%</p>
+            <p className="font-bold text-lg text-gray-900">{formatPercentage(operator.km.percentage, 2)}</p>
             <div className="w-16 bg-gray-200 rounded-full h-1.5 mt-1">
               <div
                 className="bg-gradient-to-r from-blue-400 to-blue-600 h-1.5 rounded-full transition-all duration-1000"
@@ -102,7 +103,7 @@ export const OperatorListItem: React.FC<OperatorListItemProps> = ({ operator, ra
 
           <div className="text-center">
             <p className="text-sm text-gray-500 mb-1">Eficiencia</p>
-            <p className="font-bold text-lg text-gray-900">{operator.efficiency}%</p>
+            <p className="font-bold text-lg text-gray-900">{formatPercentage(operator.efficiency, 2)}</p>
             <div className="w-16 bg-gray-200 rounded-full h-1.5 mt-1">
               <div
                 className={`h-1.5 rounded-full transition-all duration-1000 bg-gradient-to-r ${colors.bg}`}

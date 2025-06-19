@@ -9,35 +9,44 @@
  * 
  * @param value The number to format
  * @param useLocale Whether to use locale-specific formatting (client-side only)
+ * @param decimals Number of decimal places to include (default: 0)
  * @returns Formatted number string
  */
-export const formatNumber = (value: number | null | undefined, useLocale = false): string => {
+export const formatNumber = (value: number | null | undefined, useLocale = false, decimals = 0): string => {
   if (value === null || value === undefined || isNaN(value)) {
-    return '0';
+    return decimals > 0 ? '0.' + '0'.repeat(decimals) : '0';
   }
   
   // For SSR, use a consistent format that won't cause hydration errors
   if (!useLocale) {
+    if (decimals > 0) {
+      return value.toFixed(decimals);
+    }
     return value.toString();
   }
   
   // Only use locale-specific formatting for client-side rendering
   // after hydration is complete
-  return value.toLocaleString();
+  return decimals > 0 
+    ? value.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+    : value.toLocaleString();
 };
 
 /**
  * Format a percentage value
  * 
  * @param value The percentage value
+ * @param decimals Number of decimal places to include (default: 0)
  * @returns Formatted percentage string
  */
-export const formatPercentage = (value: number | null | undefined): string => {
+export const formatPercentage = (value: number | null | undefined, decimals = 0): string => {
   if (value === null || value === undefined || isNaN(value)) {
-    return '0%';
+    return decimals > 0 ? '0.' + '0'.repeat(decimals) + '%' : '0%';
   }
   
-  return `${value}%`;
+  return decimals > 0
+    ? `${value.toFixed(decimals)}%`
+    : `${value}%`;
 };
 
 /**

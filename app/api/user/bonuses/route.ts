@@ -34,10 +34,22 @@ const FACTOR_DEDUCTIONS: Record<string, number | string> = {
 
 // Función para obtener el valor base del bono según el año
 function getBaseBonusForYear(year: number): number {
-  if (year === 2025) {
-    return 142000 // Valor para 2025
+  // Valores consistentes con bonus-config.ts
+  switch (year) {
+    case 2025:
+      return 142000; // Valor para 2025
+    case 2024:
+      return 135000; // Valor para 2024
+    case 2023:
+      return 128000; // Valor para 2023
+    case 2022:
+    case 2021:
+    case 2020:
+      return 122000; // Valor para 2022, 2021 y 2020
+    default:
+      // Para años anteriores a 2020 o no especificados
+      return 122000;
   }
-  return 130000 // Valor para 2024 y anteriores
 }
 
 // Valor por día para deducciones basadas en días
@@ -286,19 +298,35 @@ export async function GET(request: NextRequest) {
         return date.getFullYear() === latestYear && date.getMonth() + 1 === latestMonth
       })
       let lastMonthDeduction = 0
-      lastMonthNovedades.forEach((novedad) => {
-        const codigoFactor = novedad.codigo_factor
-        const factorValue = FACTOR_DEDUCTIONS[codigoFactor]
+      const lastMonthDeductions = lastMonthNovedades.map((novedad: any) => {
+        const factorCode = novedad.codigo_factor
+        const factorValue = FACTOR_DEDUCTIONS[factorCode]
+        let deductionAmount = 0
+
+        // Asignar el concepto basado en el código de factor
+        const concepto = getConceptoByCode(factorCode)
 
         if (factorValue !== undefined) {
           if (factorValue === "Día") {
             const dias = novedad.dias_novedad || 1
-            lastMonthDeduction += DAILY_DEDUCTION * dias
+            deductionAmount = DAILY_DEDUCTION * dias
           } else {
-            lastMonthDeduction += (lastMonthBaseBonus * (factorValue as number)) / 100
+            deductionAmount = (lastMonthBaseBonus * (factorValue as number)) / 100
           }
         }
+        return {
+          id: novedad.id,
+          codigo: factorCode,
+          concepto: concepto,
+          fechaInicio: novedad.fecha_inicio_novedad,
+          fechaFin: novedad.fecha_fin_novedad,
+          dias: novedad.dias_novedad || 1,
+          porcentaje: factorValue,
+          monto: deductionAmount,
+          observaciones: novedad.observaciones || concepto
+        }
       })
+      lastMonthDeduction = lastMonthDeductions.reduce((sum, deduction) => sum + deduction.monto, 0)
       lastMonthDeduction = Math.min(lastMonthDeduction, lastMonthBaseBonus)
       const monthNames = [
         "Enero",
