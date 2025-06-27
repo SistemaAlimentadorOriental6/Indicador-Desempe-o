@@ -377,20 +377,6 @@ NODE_ENV=production
 
 ---
 
-## 📞 **Soporte y Contacto**
-
-### **Documentación Técnica**
-- **Componentes**: Ver carpeta `components/`
-- **Tipos**: Ver carpeta `types/`
-- **Utilidades**: Ver carpeta `utils/`
-
-### **Reportar Issues**
-- **Bugs**: Usar template de bug report
-- **Features**: Usar template de feature request
-- **Documentación**: Mejoras a documentación
-
----
-
 ## 📊 **Métricas del Proyecto**
 
 ### **Estadísticas de Código**
