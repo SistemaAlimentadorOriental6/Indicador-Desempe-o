@@ -36,7 +36,7 @@ export async function GET(request: Request) {
       const [yearlyProgressData] = await connection
         .execute(
           `SELECT 
-            YEAR(v.fecha_inicio_ejecucion) as year,
+            YEAR(v.fecha_inicio_programacion) as year,
             SUM(CASE WHEN v.codigo_variable = 'KMS' THEN v.valor_ejecucion ELSE 0 END) as kilometers,
             COUNT(CASE WHEN v.codigo_variable = 'BONOS' AND v.valor_ejecucion > 0 THEN 1 ELSE NULL END) as bonuses,
             ROUND(AVG(CASE WHEN v.codigo_variable = 'PUNTAJE' THEN v.valor_ejecucion ELSE NULL END)) as score
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
             variables_control v
           ${userCode ? "WHERE v.codigo_empleado = ?" : ""}
           GROUP BY 
-            YEAR(v.fecha_inicio_ejecucion)
+            YEAR(v.fecha_inicio_programacion)
           ORDER BY 
             year DESC
           LIMIT 5`,

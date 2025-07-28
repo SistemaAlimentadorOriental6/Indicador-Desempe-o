@@ -88,7 +88,7 @@ function getConceptoByCode(codigo: string): string {
 }
 
 // Procesamiento de datos para un solo usuario
-async function processUserData(connection: mysql.Connection, codigo: string, year: number | null) {
+async function processUserData(connection: mysql.Connection, codigo: string, year: number | null, month: number | null) {
   // Determinar el año actual si no se proporciona
   const currentYear = year || new Date().getFullYear()
 
@@ -104,8 +104,19 @@ async function processUserData(connection: mysql.Connection, codigo: string, yea
   `
   const queryParams: any[] = [codigo]
 
-  // Añadir filtros de año si se proporciona
-  if (year) {
+  // Filtrar por año y mes si se proporcionan
+  if (year && month) {
+    // Seleccionar novedades que caigan dentro del mes (inicio o fin) o abarcan el rango
+    query += ` AND (
+      (YEAR(fecha_inicio_novedad) = ? AND MONTH(fecha_inicio_novedad) = ?) OR
+      (fecha_fin_novedad IS NOT NULL AND YEAR(fecha_fin_novedad) = ? AND MONTH(fecha_fin_novedad) = ?) OR
+      (fecha_inicio_novedad <= LAST_DAY(?) AND 
+       (fecha_fin_novedad IS NULL OR fecha_fin_novedad >= ?))
+    )`
+    const firstDay = `${year}-${String(month).padStart(2,'0')}-01`
+    const lastDay = new Date(year, month, 0).toISOString().split('T')[0]
+    queryParams.push(year, month, year, month, lastDay, firstDay)
+  } else if (year) {
     query += " AND YEAR(fecha_inicio_novedad) = ?"
     queryParams.push(year)
   }
@@ -186,21 +197,12 @@ async function processUserData(connection: mysql.Connection, codigo: string, yea
   finalBonus = Math.max(0, baseBonus - totalDeductionAmount)
   deductionPercentage = Math.round((totalDeductionAmount / baseBonus) * 100)
 
-  // Procesar datos del último mes
-  if (novedades.length > 0) {
-    // Obtener la fecha más reciente
-    const latestDate = new Date(novedades[0].fecha_inicio_novedad)
-    const latestYear = latestDate.getFullYear()
-    const latestMonth = latestDate.getMonth() + 1 // JavaScript months are 0-based
+  // Procesar datos del último mes (global o específico)
+  if (year && month) {
+    // Si se proporcionó año y mes, usar esos valores directamente
+    const lastMonthBaseBonus = getBaseBonusForYear(year)
 
-    // Obtener el valor base del bono para el año de la última novedad
-    const lastMonthBaseBonus = getBaseBonusForYear(latestYear)
-
-    // Filtrar novedades del último mes
-    const lastMonthNovedades = novedades.filter((novedad) => {
-      const date = new Date(novedad.fecha_inicio_novedad)
-      return date.getFullYear() === latestYear && date.getMonth() + 1 === latestMonth
-    })
+    const lastMonthNovedades = novedades // ya filtradas
 
     // Calcular deducciones específicas del último mes
     let lastMonthDeduction = 0
@@ -238,19 +240,19 @@ async function processUserData(connection: mysql.Connection, codigo: string, yea
     ]
 
     lastMonthData = {
-      year: latestYear,
-      month: latestMonth,
+      year: year,
+      month: month,
       bonusValue: lastMonthBaseBonus,
       deductionAmount: lastMonthDeduction,
       finalValue: lastMonthBaseBonus - lastMonthDeduction,
-      monthName: monthNames[latestMonth - 1],
+      monthName: monthNames[month - 1],
     }
 
     // Añadir a los meses disponibles
     availableMonths.push({
-      year: latestYear,
-      month: latestMonth,
-      monthName: monthNames[latestMonth - 1],
+      year: year,
+      month: month,
+      monthName: monthNames[month - 1],
     })
   }
 
@@ -293,85 +295,87 @@ async function processUserData(connection: mysql.Connection, codigo: string, yea
   }
 }
 
-export async function POST(request: NextRequest) {
-  // Obtener parámetros del cuerpo de la solicitud
-  const body = await request.json()
-  const { codigos, year } = body
-
-  // Validar que se proporcionen códigos
-  if (!codigos || !Array.isArray(codigos) || codigos.length === 0) {
-    return NextResponse.json({ error: "Se requiere un array de códigos de empleados" }, { status: 400 })
+// Obtener todos los años disponibles para una lista de códigos
+async function getAvailableYearsForCodes(connection: mysql.Connection, codigos: string[]): Promise<number[]> {
+  if (codigos.length === 0) {
+    return []
   }
 
-  // Configuración de la conexión a la base de datos
-  const dbConfig = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
+  const placeholders = codigos.map(() => '?').join(',')
+  const query = `
+    SELECT DISTINCT YEAR(fecha_inicio_novedad) as year
+    FROM novedades
+    WHERE codigo_empleado IN (${placeholders})
+    ORDER BY year DESC
+  `
+  
+  const [rows] = await connection.execute(query, codigos)
+  const years = (rows as any[]).map(r => r.year).filter(y => y !== null)
+  
+  // Si no hay años, devolver un fallback
+  if (years.length === 0) {
+    const currentYear = new Date().getFullYear()
+    return Array.from({ length: 5 }, (_, i) => currentYear - i)
+  }
+  
+  return years
+}
+
+export async function POST(request: NextRequest) {
+  const { codigos, year, month } = await request.json()
+
+  if (!codigos || !Array.isArray(codigos) || codigos.length === 0) {
+    return NextResponse.json({ success: false, message: "Se requiere un array de códigos." }, { status: 400 })
   }
 
   let connection: mysql.Connection | null = null
-
   try {
-    // Intentar conectar a la base de datos
-    try {
-      connection = await mysql.createConnection(dbConfig)
-    } catch (error) {
-      console.error("Error al conectar a la base de datos:", error)
-      return NextResponse.json({ error: "Error de conexión a la base de datos" }, { status: 503 })
-    }
+    connection = await mysql.createConnection(process.env.DATABASE_URL || "")
 
-    // Procesar cada código de usuario
-    const results: Record<string, any> = {}
-    
-    // Limitar a 20 usuarios por solicitud para evitar sobrecarga
-    const limitedCodigos = codigos.slice(0, 20)
-    
-    // Asegurarse de que connection no sea null antes de procesar
-    if (!connection) {
-      throw new Error("No se pudo establecer conexión con la base de datos")
-    }
-    
-    // Procesar en paralelo para mayor eficiencia
-    const promises = limitedCodigos.map(async (codigo: string) => {
-      try {
-        const userData = await processUserData(connection!, codigo, year ? Number.parseInt(year as string) : null)
-        return { codigo, data: userData }
-      } catch (error) {
-        console.error(`Error procesando usuario ${codigo}:`, error)
-        return { 
-          codigo, 
-          data: { 
-            success: false, 
-            error: "Error al procesar los datos del usuario" 
-          } 
+    // Obtener último año y mes global disponibles si no se proporcionan
+    let processingYear = year || null
+    let processingMonth: number | null = month || null
+
+    if (!processingMonth) {
+      const [maxDateRows] = await connection.execute(
+        `SELECT YEAR(MAX(fecha_inicio_novedad)) as year, MONTH(MAX(fecha_inicio_novedad)) as month FROM novedades`
+      )
+      if (Array.isArray(maxDateRows) && maxDateRows.length > 0) {
+        const row: any = maxDateRows[0]
+        // Si no hay month o year no está acompañado de month, usar valores globales
+        if (!processingMonth) processingMonth = row.month || new Date().getMonth() + 1
+        if (!month) {
+          // Si el request no especificó month, también ignoramos el year y usamos el global
+          processingYear = row.year || new Date().getFullYear()
         }
+      } else {
+        // Fallback al año/mes actual si no hay datos
+        if (!processingYear) processingYear = new Date().getFullYear()
+        if (!processingMonth) processingMonth = new Date().getMonth() + 1
       }
-    })
-    
-    const userResults = await Promise.all(promises)
-    
-    // Convertir el array de resultados a un objeto con los códigos como claves
-    userResults.forEach(result => {
-      results[result.codigo] = result.data
-    })
+    }
 
-    return NextResponse.json({
-      success: true,
-      results
+    // Obtener todos los años disponibles para los códigos solicitados
+    const availableYears = await getAvailableYearsForCodes(connection, codigos)
+
+    const results: { [key: string]: any } = {}
+    
+    for (const codigo of codigos) {
+      const userData = await processUserData(connection, codigo, processingYear, processingMonth)
+      results[codigo] = userData
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      results,
+      availableYears, // Devolver la lista centralizada de años
+      processedYear: processingYear, // Informar qué año se usó
+      processedMonth: processingMonth // Informar qué mes se usó
     })
   } catch (error) {
-    console.error("Error al procesar la solicitud:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Error al procesar la solicitud",
-      },
-      { status: 500 },
-    )
+    console.error("Error en el batch de bonos:", error)
+    return NextResponse.json({ success: false, message: "Error interno del servidor." }, { status: 500 })
   } finally {
-    // Cerrar la conexión a la base de datos
     if (connection) {
       await connection.end()
     }

@@ -1,32 +1,38 @@
 export interface Operator {
-    id: string
+    id: number
+    codigo: string
     name: string
-    cedula: string
+    cedula?: string
     document?: string
     avatar?: string
-    position: string
+    position?: string
     phone?: string
+    zona?: string | null
+    padrino?: string | null
+    tarea?: string | null
     joinDate: string | null
-    bonus: {
+    retirementDate?: string | null
+    birthDate?: string | null
+    bonus?: {
       percentage: number
       total: number
-      category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
+      category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia" | "Revisar"
       trend: "up" | "down" | "stable"
       date: string | null
     }
-    km: {
+    km?: {
       percentage: number
-      total: number
+      total?: number
       total_programado?: number
       total_ejecutado?: number
-      category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
+      category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia" | "Revisar"
       trend: "up" | "down" | "stable"
       date: string | null
     }
     efficiency: number
-    category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
+    category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia" | "Revisar"
     rank: number
-    weeklyPerformance: number[]
+    weeklyPerformance?: number[]
     department?: string
     monthlyGoal?: number
     lastUpdate?: string
@@ -42,7 +48,7 @@ export interface Operator {
     }
   }
   
-  export type FilterType = "all" | "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
+  export type FilterType = "all" | "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia" | "Revisar"
   export type SortType = "rank" | "bonus" | "km" | "efficiency"
   export type ViewMode = "grid" | "list"
   export type SortOrder = "asc" | "desc"

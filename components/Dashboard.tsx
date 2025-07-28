@@ -2,7 +2,6 @@ import React from 'react';
 import { Users, MapPin, Trophy, Gift, TrendingUp, Activity, Calendar, Target } from 'lucide-react';
 import StatsCard from '@/components/StatsCard';
 import UserRankings from '@/components/UsersRankings';
-import KilometersTracker from '@/components/KilometersTracker';
 import ActiveUsers from '@/components/ActiveUsers';
 import FilterBar from '@/components/FilterBar';
 

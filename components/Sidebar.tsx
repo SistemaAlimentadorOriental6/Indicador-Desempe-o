@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface SidebarProps {
@@ -21,22 +20,12 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
       category: 'main' 
     },
     { 
-      id: 'kilometers', 
-      label: 'Seguimiento KM', 
+      id: 'config', 
+      label: 'Configuración', 
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      ),
-      category: 'main' 
-    },
-    { 
-      id: 'bonuses', 
-      label: 'Bonos', 
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       ),
       category: 'main' 
@@ -137,11 +126,14 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
           <div className="flex items-center space-x-4">
             {/* Logo Container */}
             <div className="relative">
-              <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 via-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-xl shadow-emerald-500/30">
-                {/* Dashboard Icon */}
-                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
+              <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 via-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-xl shadow-emerald-500/30 overflow-hidden">
+                {/* Logo SAO6 */}
+                <img
+                  src="/LOGOS-SAO.webp"
+                  alt="Logo SAO6"
+                  className="object-contain w-10 h-10"
+                  style={{ maxWidth: '2.5rem', maxHeight: '2.5rem' }}
+                />
               </div>
               {/* Glow Effect */}
               <div className="absolute -inset-1 bg-gradient-to-br from-emerald-400 to-green-500 rounded-2xl blur opacity-30"></div>
@@ -149,10 +141,10 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
             
             <div>
               <h1 className="font-bold text-xl bg-gradient-to-r from-slate-800 to-emerald-700 bg-clip-text text-transparent">
-                AdminPro
+                SAO6
               </h1>
               <p className="text-xs text-emerald-600/70 mt-1 font-medium">
-                Dashboard Profesional
+                Dashboard SAO6
               </p>
             </div>
           </div>

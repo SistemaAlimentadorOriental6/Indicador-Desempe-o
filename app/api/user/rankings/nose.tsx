@@ -146,14 +146,14 @@ export async function GET() {
         v.codigo_empleado AS codigo,
         COALESCE(ROUND((v.valor_ejecucion / NULLIF(v.valor_programacion, 0) * 100), 2), 0) AS porcentaje,
         COALESCE(v.valor_ejecucion, 0) AS total,
-        v.fecha_fin_ejecucion AS fecha
+        v.fecha_fin_programacion AS fecha
       FROM variables_control v
       INNER JOIN (
-        SELECT codigo_empleado, MAX(fecha_fin_ejecucion) as max_fecha
+        SELECT codigo_empleado, MAX(fecha_fin_programacion) as max_fecha
         FROM variables_control
         WHERE codigo_variable LIKE '%bono%' OR codigo_variable LIKE '%incentivo%'
         GROUP BY codigo_empleado
-      ) vm ON v.codigo_empleado = vm.codigo_empleado AND v.fecha_fin_ejecucion = vm.max_fecha
+      ) vm ON v.codigo_empleado = vm.codigo_empleado AND v.fecha_fin_programacion = vm.max_fecha
       WHERE v.codigo_variable LIKE '%bono%' OR v.codigo_variable LIKE '%incentivo%'
     `);
     
@@ -165,14 +165,14 @@ export async function GET() {
         v.codigo_empleado AS codigo,
         COALESCE(ROUND((v.valor_ejecucion / NULLIF(v.valor_programacion, 0) * 100), 2), 0) AS porcentaje,
         COALESCE(v.valor_ejecucion, 0) AS total,
-        v.fecha_fin_ejecucion AS fecha
+        v.fecha_fin_programacion AS fecha
       FROM variables_control v
       INNER JOIN (
-        SELECT codigo_empleado, MAX(fecha_fin_ejecucion) as max_fecha
+        SELECT codigo_empleado, MAX(fecha_fin_programacion) as max_fecha
         FROM variables_control
         WHERE codigo_variable LIKE '%km%' OR codigo_variable LIKE '%kilometr%'
         GROUP BY codigo_empleado
-      ) vm ON v.codigo_empleado = vm.codigo_empleado AND v.fecha_fin_ejecucion = vm.max_fecha
+      ) vm ON v.codigo_empleado = vm.codigo_empleado AND v.fecha_fin_programacion = vm.max_fecha
       WHERE v.codigo_variable LIKE '%km%' OR v.codigo_variable LIKE '%kilometr%'
     `);
 

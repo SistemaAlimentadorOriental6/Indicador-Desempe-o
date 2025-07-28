@@ -14,6 +14,7 @@ export interface AfectacionProcesada {
     mes: string
     falta: string
     codigo: string
+    afectaDesempeno: boolean;
   }
   
   export interface DeductionItem {

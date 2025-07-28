@@ -42,18 +42,18 @@ export async function GET(request: Request) {
       const [dailyActivityData] = await connection
         .execute(
           `SELECT 
-            DAY(v.fecha_inicio_ejecucion) as day,
-            DATE_FORMAT(v.fecha_inicio_ejecucion, '%d/%m/%Y') as date,
+            DAY(v.fecha_inicio_programacion) as day,
+            DATE_FORMAT(v.fecha_inicio_programacion, '%d/%m/%Y') as date,
             v.valor_ejecucion as value
           FROM 
             variables_control v
           WHERE 
             v.codigo_variable = ?
-            AND YEAR(v.fecha_inicio_ejecucion) = ?
-            AND MONTH(v.fecha_inicio_ejecucion) = ?
+            AND YEAR(v.fecha_inicio_programacion) = ?
+            AND MONTH(v.fecha_inicio_programacion) = ?
             ${userCode ? "AND v.codigo_empleado = ?" : ""}
           ORDER BY 
-            v.fecha_inicio_ejecucion ASC`,
+            v.fecha_inicio_programacion ASC`,
           userCode ? [variableCode, year, month, userCode] : [variableCode, year, month],
         )
         .catch((err) => {

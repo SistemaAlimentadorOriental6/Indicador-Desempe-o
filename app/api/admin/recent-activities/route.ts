@@ -41,7 +41,7 @@ export async function GET(request: Request) {
               operadores_sao6.nombre,
               variables_control.codigo_variable AS tipo,
               variables_control.valor_ejecucion AS valor,
-              variables_control.fecha_inicio_ejecucion AS fecha
+              variables_control.fecha_inicio_programacion AS fecha
           FROM 
               variables_control
           JOIN 
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
           WHERE 
               variables_control.codigo_variable IN ('KMS')
           ORDER BY 
-              variables_control.fecha_inicio_ejecucion DESC
+              variables_control.fecha_inicio_programacion DESC
           LIMIT ?;  -- o el valor que desees`,
           [Number(limit)],
         )

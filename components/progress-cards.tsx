@@ -340,22 +340,29 @@ const api = {
       throw new Error(`Error del servidor: ${response.status} ${response.statusText}`)
     }
 
-    const data = await response.json()
-    if (!data.success && data.error) {
-      throw new Error(data.message || "Error al cargar los datos")
+    const responseData = await response.json()
+    
+    // Manejar el nuevo formato de respuesta estandarizada
+    if (!responseData.success) {
+      throw new Error(responseData.error || responseData.message || "Error al cargar los datos")
     }
 
-    // Process data
-    const processedData = data.data.map((item: MonthData) => ({
+    // Los datos ahora vienen en responseData.data
+    const apiData = responseData.data || {}
+    
+    // Process data - los datos ya vienen procesados desde el servicio
+    const processedData = (apiData.data || []).map((item: MonthData) => ({
       ...item,
-      percentage: item.valor_programacion > 0 ? Math.round((item.valor_ejecucion / item.valor_programacion) * 100) : 0,
+      // Asegurar que el percentage esté calculado
+      percentage: item.percentage !== undefined ? item.percentage : 
+        (item.valor_programacion > 0 ? Math.round((item.valor_ejecucion / item.valor_programacion) * 100) : 0),
     }))
 
     return {
       monthlyData: processedData,
-      availableYears: data.availableYears || [],
-      availableMonths: data.availableMonths || [],
-      summary: data.summary || null,
+      availableYears: apiData.availableYears || [],
+      availableMonths: apiData.availableMonths || [],
+      summary: apiData.summary || null,
     }
   },
 
@@ -371,17 +378,15 @@ const api = {
     }
 
     // Parse the JSON data
-    const rawData = await response.text()
-    let data
-    try {
-      data = JSON.parse(rawData)
-    } catch (parseError) {
-      throw new Error("Error al procesar la respuesta del servidor. La respuesta no es un JSON válido.")
+    const responseData = await response.json()
+    
+    // Manejar el nuevo formato de respuesta estandarizada
+    if (!responseData.success) {
+      throw new Error(responseData.error || responseData.message || "Error al cargar los datos de bonos")
     }
 
-    if (data.error) {
-      throw new Error(data.error || "Error al cargar los datos de bonos")
-    }
+    // Los datos ahora vienen en responseData.data
+    const data = responseData.data || {}
 
     // Filtrar deducciones duplicadas por fecha
     let filteredDeductions = data.deductions || []
@@ -443,7 +448,7 @@ const api = {
             : data.deductionPercentage ||
               (data.baseBonus && totalDeduction
                 ? Math.round((totalDeduction / data.baseBonus) * 100)
-                : data.summary
+                : data.summary && data.summary.percentage !== undefined
                   ? 100 - data.summary.percentage
                   : 0),
         deductionAmount:

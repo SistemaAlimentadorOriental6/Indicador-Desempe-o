@@ -143,7 +143,7 @@ export const KmTracking: React.FC = () => {
   )
   
   return (
-    <div className="space-y-8">
+    <div className="min-h-screen overflow-y-auto space-y-8">
       <KmHeader viewMode={viewMode} setViewMode={setViewMode} />
 
       {viewMode === "global" ? renderGlobalView() : renderIndividualView()}

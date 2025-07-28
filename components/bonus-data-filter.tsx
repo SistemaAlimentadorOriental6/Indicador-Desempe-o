@@ -165,7 +165,7 @@ export default function BonusDataFilter() {
   const [isLoading, setIsLoading] = useState(true)
   const [showYearDropdown, setShowYearDropdown] = useState(false)
   const [apiData, setApiData] = useState<any>(null)
-  const [availableYears, setAvailableYears] = useState<number[]>([])
+  const [availableYears, setAvailableYears] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [showInfoTooltip, setShowInfoTooltip] = useState(false)
 
@@ -181,14 +181,14 @@ export default function BonusDataFilter() {
         setIsLoading(true)
         setError(null)
 
-        const response = await fetch(`/api/user/bonuses?codigo=${user.codigo}`)
+        const response = await fetch(`/api/user/bonuses?codigo=${user.codigo}&year=${selectedYear}`)
 
         if (!response.ok) {
           throw new Error(`Error fetching data: ${response.status}`)
         }
 
         const data = await response.json()
-        console.log("Bonus API data:", data)
+        console.log("Bonus API data for year", selectedYear, ":", data)
 
         // Verificar si la respuesta tiene error
         if (data.error) {
@@ -197,76 +197,47 @@ export default function BonusDataFilter() {
 
         setApiData(data)
 
-        // Set available years from API data
-        if (data.availableYears && data.availableYears.length > 0) {
-          setAvailableYears(data.availableYears)
+        // Procesar datos para el año seleccionado
+        const yearlyData = processYearlyBonusData(data, parseInt(selectedYear))
+        const statistics = calculateBonusStatistics(yearlyData)
+        
+        setFilteredData({
+          totalBonus: statistics.totalBonus,
+          chartData: yearlyData
+        })
 
-          // Si hay años disponibles, seleccionar el más reciente por defecto
-          if (!selectedYear || !data.availableYears.includes(selectedYear)) {
-            setSelectedYear(data.availableYears[0])
-          }
-        } else if (data.lastMonthData && data.lastMonthData.year) {
-          // If we have lastMonthData but no availableYears, use the year from lastMonthData
-          setAvailableYears([data.lastMonthData.year])
-          setSelectedYear(data.lastMonthData.year)
+        // Set available years from API data with fallback
+        const yearsFromApi = data.availableYears || []
+        if (yearsFromApi.length > 0) {
+          setAvailableYears(yearsFromApi)
         } else {
-          // Fallback to current year and 4 previous years
-          setAvailableYears(Array.from({ length: 5 }, (_, i) => currentYear - i))
+          // Fallback: usar año actual y 5 años anteriores
+          const currentYear = new Date().getFullYear()
+          const fallbackYears = Array.from({ length: 6 }, (_, i) => currentYear - i)
+          setAvailableYears(fallbackYears.map(String)) // Convertir a string
         }
-      } catch (err) {
-        console.error("Error fetching bonus data:", err)
-        setError("No se pudieron cargar los datos de bonos. Intente nuevamente más tarde.")
 
-        // Fallback to current year and 4 previous years
-        setAvailableYears(Array.from({ length: 5 }, (_, i) => currentYear - i))
-      } finally {
+        setIsLoading(false)
+      } catch (err: any) {
+        console.error("Error fetching bonus data:", err)
+        setError(err.message || "Error al cargar los datos")
         setIsLoading(false)
       }
     }
 
     fetchData()
-  }, [user, currentYear])
-
-  // Process data when filters change
-  useEffect(() => {
-    if (!apiData) return
-
-    setIsLoading(true)
-
-    // Use setTimeout to simulate processing time and show loading state
-    const timer = setTimeout(() => {
-      try {
-        // Process data for the selected year
-        const chartData = processYearlyBonusData(apiData, selectedYear)
-
-        // Calculate statistics
-        const stats = calculateBonusStatistics(chartData)
-
-        setFilteredData({
-          ...stats,
-          chartData,
-        })
-      } catch (err) {
-        console.error("Error processing bonus data:", err)
-        setError("Error al procesar los datos de bonos")
-      } finally {
-        setIsLoading(false)
-      }
-    }, 300)
-
-    return () => clearTimeout(timer)
-  }, [apiData, selectedYear])
+  }, [user?.codigo, selectedYear])
 
   // Handle year navigation
   const handlePrevYear = () => {
-    const minYear = Math.min(...availableYears)
+    const minYear = Math.min(...availableYears.map(Number))
     if (selectedYear > minYear) {
       setSelectedYear(selectedYear - 1)
     }
   }
 
   const handleNextYear = () => {
-    const maxYear = Math.max(...availableYears)
+    const maxYear = Math.max(...availableYears.map(Number))
     if (selectedYear < maxYear) {
       setSelectedYear(selectedYear + 1)
     }
@@ -419,11 +390,11 @@ export default function BonusDataFilter() {
             onClick={handlePrevYear}
             className={cn(
               "p-2 rounded-lg hover:bg-white/70 transition-colors",
-              selectedYear === Math.min(...availableYears)
+              selectedYear === Math.min(...availableYears.map(Number))
                 ? "text-gray-400 cursor-not-allowed"
                 : "text-gray-600 hover:text-teal-700")
             }
-            disabled={selectedYear === Math.min(...availableYears)}
+            disabled={selectedYear === Math.min(...availableYears.map(Number))}
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -451,12 +422,12 @@ export default function BonusDataFilter() {
                     <button
                       key={year}
                       onClick={() => {
-                        setSelectedYear(year)
+                        setSelectedYear(Number(year))
                         setShowYearDropdown(false)
                       }}
                       className={cn(
                         "w-full text-left px-3 py-2 rounded-lg text-sm transition-colors",
-                        selectedYear === year
+                        selectedYear === Number(year)
                           ? "bg-teal-50 text-teal-700 font-medium"
                           : "hover:bg-teal-50/50 text-gray-700"
                       )}
@@ -473,11 +444,11 @@ export default function BonusDataFilter() {
             onClick={handleNextYear}
             className={cn(
               "p-2 rounded-lg hover:bg-white/70 transition-colors",
-              selectedYear === Math.max(...availableYears)
+              selectedYear === Math.max(...availableYears.map(Number))
                 ? "text-gray-400 cursor-not-allowed"
                 : "text-gray-600 hover:text-teal-700")
             }
-            disabled={selectedYear === Math.max(...availableYears)}
+            disabled={selectedYear === Math.max(...availableYears.map(Number))}
           >
             <ChevronRight className="h-5 w-5" />
           </button>

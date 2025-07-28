@@ -6,7 +6,7 @@ const BONUS_RANGES = {
   Plata: { min: 95, max: 100 },
   Bronce: { min: 90, max: 95 },
   Mejorar: { min: 60, max: 90 },
-  "Taller Conciencia": { min: 0, max: 60 }
+  "Taller Conciencia": { min: 0, max: 60 },
 };
 
 // Rangos de porcentajes para categorías de kilómetros
@@ -15,7 +15,7 @@ const KM_RANGES = {
   Plata: { min: 90, max: 94 },
   Bronce: { min: 85, max: 90 },
   Mejorar: { min: 70, max: 85 },
-  "Taller Conciencia": { min: 0, max: 70 }
+  "Taller Conciencia": { min: 0, max: 70 },
 };
 
 // Matriz de valoración cualitativa para determinar la categoría final

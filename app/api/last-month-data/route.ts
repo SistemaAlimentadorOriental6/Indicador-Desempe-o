@@ -35,9 +35,9 @@ export async function GET(request: Request) {
       // Base query to get the last month with data
       let lastMonthQuery = `
         SELECT 
-          YEAR(fecha_inicio_ejecucion) as year,
-          MONTH(fecha_inicio_ejecucion) as month,
-          MAX(fecha_inicio_ejecucion) as last_date
+          YEAR(fecha_inicio_programacion) as year,
+          MONTH(fecha_inicio_programacion) as month,
+          MAX(fecha_inicio_programacion) as last_date
         FROM variables_control
         WHERE valor_ejecucion > 0
       `
@@ -48,7 +48,7 @@ export async function GET(request: Request) {
       }
 
       lastMonthQuery += `
-        GROUP BY YEAR(fecha_inicio_ejecucion), MONTH(fecha_inicio_ejecucion)
+        GROUP BY YEAR(fecha_inicio_programacion), MONTH(fecha_inicio_programacion)
         ORDER BY year DESC, month DESC
         LIMIT 1
       `
@@ -90,8 +90,8 @@ export async function GET(request: Request) {
         SELECT SUM(valor_ejecucion) as total
         FROM variables_control
         WHERE codigo_variable = 'KMS'
-        AND YEAR(fecha_inicio_ejecucion) = ?
-        AND MONTH(fecha_inicio_ejecucion) = ?
+        AND YEAR(fecha_inicio_programacion) = ?
+        AND MONTH(fecha_inicio_programacion) = ?
       `
 
       // Query to get bonos for the last month
@@ -99,8 +99,8 @@ export async function GET(request: Request) {
         SELECT SUM(valor_ejecucion) as total
         FROM variables_control
         WHERE codigo_variable = 'BONOS'
-        AND YEAR(fecha_inicio_ejecucion) = ?
-        AND MONTH(fecha_inicio_ejecucion) = ?
+        AND YEAR(fecha_inicio_programacion) = ?
+        AND MONTH(fecha_inicio_programacion) = ?
       `
 
       // Query to get puntaje for the last month
@@ -108,8 +108,8 @@ export async function GET(request: Request) {
         SELECT SUM(valor_ejecucion) as total
         FROM variables_control
         WHERE codigo_variable = 'KMS'
-        AND YEAR(fecha_inicio_ejecucion) = ?
-        AND MONTH(fecha_inicio_ejecucion) = ?
+        AND YEAR(fecha_inicio_programacion) = ?
+        AND MONTH(fecha_inicio_programacion) = ?
       `
 
       // Add user filter if provided

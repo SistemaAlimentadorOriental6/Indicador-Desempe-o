@@ -50,8 +50,8 @@ export async function GET(request: Request) {
               variables_control v ON o.codigo = v.codigo_empleado
           WHERE 
               v.codigo_variable = 'KMS'
-              AND MONTH(v.fecha_inicio_ejecucion) = ?
-              AND YEAR(v.fecha_inicio_ejecucion) = ?
+              AND MONTH(v.fecha_inicio_programacion) = ?
+              AND YEAR(v.fecha_inicio_programacion) = ?
           GROUP BY 
               o.codigo, o.nombre, o.cedula, o.rol
           ORDER BY 

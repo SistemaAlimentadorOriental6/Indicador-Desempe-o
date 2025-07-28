@@ -1,143 +1,115 @@
-import { NextResponse } from "next/server"
-import { createConnection } from "mysql2/promise"
+import { withErrorHandling, apiResponse, QueryValidator, commonParams } from '@/lib/api-helpers'
+import { getDatabase } from '@/lib/database'
+import { getCache } from '@/lib/cache'
 
-// Database connection configuration
-const dbConfig = {
-  host: process.env.DB_HOST || "localhost",
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
-  database: process.env.DB_NAME || "your_database",
+interface AdminStatistics {
+  totalUsers: number
+  activeUsers: number
+  totalKilometers: number
+  averageKilometers: number
 }
 
-export async function GET(request: Request) {
+async function handleGet(request: Request) {
+  const { searchParams } = new URL(request.url)
+  
+  // Validar parámetros opcionales
+  const validator = new QueryValidator(searchParams)
+  validator
+    .optionalNumber('month', 'Mes')
+    .optionalNumber('year', 'Año')
+  
+  validator.throwIfErrors()
+
+  // Extraer parámetros con valores por defecto
+  const { year, month } = commonParams.getDateFilters(searchParams)
+  const currentDate = new Date()
+  const targetYear = year || currentDate.getFullYear()
+  const targetMonth = month || (currentDate.getMonth() + 1)
+
+  console.log(`[Admin Stats] Solicitud para año: ${targetYear}, mes: ${targetMonth}`)
+
+  // Obtener servicios
+  const db = getDatabase()
+  const cache = getCache()
+
+  // Generar clave de caché
+  const cacheKey = cache.getAdminDataKey('statistics', {
+    year: targetYear,
+    month: targetMonth,
+  })
+
   try {
-    // Get query parameters
-    const { searchParams } = new URL(request.url)
-    const month = searchParams.get("month") || new Date().getMonth() + 1
-    const year = searchParams.get("year") || new Date().getFullYear()
+    // Intentar obtener de caché primero
+    const cached = await cache.get<AdminStatistics>(cacheKey)
+    if (cached) {
+      console.log('[Admin Stats] Datos obtenidos de caché')
+      return apiResponse.success({
+        statistics: cached,
+        fromCache: true,
+      })
+    }
 
-    console.log(`Processing request for month: ${month}, year: ${year}`)
+    console.log('[Admin Stats] Obteniendo datos de base de datos...')
 
-    // Connect to the database
-    const connection = await createConnection(dbConfig).catch((err) => {
-      console.error("Database connection error:", err)
-      return null
+    // Ejecutar todas las consultas en paralelo para mejor rendimiento
+    const [totalUsersResult, activeUsersResult, kilometersResult] = await Promise.all([
+      // Total de usuarios
+      db.executeQuery<Array<{ total: number }>>('SELECT COUNT(*) as total FROM operadores_sao6'),
+      
+      // Usuarios activos (con kilómetros en el mes seleccionado)
+      db.executeQuery<Array<{ active: number }>>(`
+        SELECT COUNT(DISTINCT codigo_empleado) as active
+        FROM variables_control
+        WHERE codigo_variable = 'KMS'
+        AND MONTH(fecha_inicio_programacion) = ?
+        AND YEAR(fecha_inicio_programacion) = ?
+        AND valor_ejecucion > 0
+      `, [targetMonth, targetYear]),
+      
+      // Total de kilómetros
+      db.executeQuery<Array<{ total: number }>>(`
+        SELECT SUM(valor_ejecucion) as total
+        FROM variables_control
+        WHERE codigo_variable = 'KMS'
+        AND MONTH(fecha_inicio_programacion) = ?
+        AND YEAR(fecha_inicio_programacion) = ?
+      `, [targetMonth, targetYear])
+    ])
+
+    // Procesar resultados con valores por defecto
+    const totalUsers = totalUsersResult[0]?.total || 0
+    const activeUsers = activeUsersResult[0]?.active || 0
+    const totalKilometers = kilometersResult[0]?.total || 0
+    const averageKilometers = activeUsers > 0 ? Math.round(totalKilometers / activeUsers) : 0
+
+    const statistics: AdminStatistics = {
+      totalUsers,
+      activeUsers,
+      totalKilometers,
+      averageKilometers,
+    }
+
+    console.log('[Admin Stats] Estadísticas calculadas:', statistics)
+
+    // Guardar en caché por 5 minutos
+    await cache.set(cacheKey, statistics, cache.TTL.DEFAULT)
+
+    // Respuesta exitosa
+    return apiResponse.success({
+      statistics,
+      fromCache: false,
+      period: {
+        year: targetYear,
+        month: targetMonth,
+        monthName: new Date(targetYear, targetMonth - 1).toLocaleDateString('es-ES', { month: 'long' }),
+      },
     })
 
-    if (!connection) {
-      console.log("No database connection, returning empty data")
-      return NextResponse.json(
-        {
-          statistics: {
-            totalUsers: 0,
-            activeUsers: 0,
-            totalKilometers: 0,
-            averageKilometers: 0,
-          },
-          error: "Error de conexión a la base de datos",
-        },
-        { status: 500 },
-      )
-    }
-
-    try {
-      // Query to get total users
-      const [usersResult] = await connection.execute("SELECT COUNT(*) as total FROM operadores_sao6").catch((err) => {
-        console.error("Error querying users:", err)
-        return [{ total: 0 }]
-      })
-      const totalUsers = (usersResult as any[])[0]?.total || 0
-
-      // Query to get active users (users with kilometers in the selected month)
-      // Using "KMS" instead of "KILOMETROS"
-      const [activeUsersResult] = await connection
-        .execute(
-          `SELECT COUNT(DISTINCT codigo_empleado) as active
-           FROM variables_control
-           WHERE codigo_variable = 'KMS'
-           AND MONTH(fecha_inicio_ejecucion) = ?
-           AND YEAR(fecha_inicio_ejecucion) = ?
-           AND valor_ejecucion > 0`,
-          [month, year],
-        )
-        .catch((err) => {
-          console.error("Error querying active users:", err)
-          return [{ active: 0 }]
-        })
-      const activeUsers = (activeUsersResult as any[])[0]?.active || 0
-
-      // Query to get total kilometers
-      // Using "KMS" instead of "KILOMETROS"
-      const [kilometersResult] = await connection
-        .execute(
-          `SELECT SUM(valor_ejecucion) as total
-           FROM variables_control
-           WHERE codigo_variable = 'KMS'
-           AND MONTH(fecha_inicio_ejecucion) = ?
-           AND YEAR(fecha_inicio_ejecucion) = ?`,
-          [month, year],
-        )
-        .catch((err) => {
-          console.error("Error querying kilometers:", err)
-          return [{ total: 0 }]
-        })
-      const totalKilometers = (kilometersResult as any[])[0]?.total || 0
-
-      // Calculate average kilometers per user
-      const averageKilometers = activeUsers > 0 ? totalKilometers / activeUsers : 0
-
-      console.log("Successfully retrieved statistics:", {
-        totalUsers,
-        activeUsers,
-        totalKilometers,
-        averageKilometers,
-      })
-
-      // Close the database connection
-      await connection.end().catch(() => {})
-
-      // Return the statistics
-      return NextResponse.json({
-        statistics: {
-          totalUsers,
-          activeUsers,
-          totalKilometers,
-          averageKilometers,
-        },
-      })
-    } catch (error) {
-      console.error("Database error:", error)
-
-      try {
-        await connection.end().catch(() => {})
-      } catch (e) {}
-
-      return NextResponse.json(
-        {
-          statistics: {
-            totalUsers: 0,
-            activeUsers: 0,
-            totalKilometers: 0,
-            averageKilometers: 0,
-          },
-          error: "Error en la consulta de la base de datos",
-        },
-        { status: 500 },
-      )
-    }
   } catch (error) {
-    console.error("Server error:", error)
-    return NextResponse.json(
-      {
-        statistics: {
-          totalUsers: 0,
-          activeUsers: 0,
-          totalKilometers: 0,
-          averageKilometers: 0,
-        },
-        error: "Error del servidor",
-      },
-      { status: 500 },
-    )
+    console.error('[Admin Stats] Error al obtener estadísticas:', error)
+    throw error // Se manejará en withErrorHandling
   }
 }
+
+// Exportar el handler envuelto con manejo de errores
+export const GET = withErrorHandling(handleGet)
