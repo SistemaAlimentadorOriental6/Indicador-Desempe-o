@@ -51,7 +51,7 @@ interface SidebarProps {
     hydration: number
   }
   upcomingActivities: {
-    id: string
+    id: number
     month: string
     day: string
     title: string
@@ -1030,12 +1030,6 @@ const ProfileHeader = memo(function ProfileHeader({
                 repeat: Number.POSITIVE_INFINITY,
                 ease: "linear",
               }}
-              animate={{ rotate: [0, 360] }}
-              transition={{
-                duration: 20,
-                repeat: Number.POSITIVE_INFINITY,
-                ease: "linear",
-              }}
             />
 
             <motion.div
@@ -1210,6 +1204,8 @@ const SidebarContent = memo(function SidebarContent({
     time: string
   }[]
 }) {
+
+
   // Use IntersectionObserver to load components only when visible
   const [visibleSections, setVisibleSections] = useState<Record<string, boolean>>({
     navigation: true,
@@ -1238,7 +1234,7 @@ const SidebarContent = memo(function SidebarContent({
     Object.entries(sectionRefs).forEach(([key, ref]) => {
       if (ref.current) {
         const observer = new IntersectionObserver((entries) => {
-          entries.forEach((entry) => {
+          entries.forEach((entry: IntersectionObserverEntry) => {
             if (entry.isIntersecting) {
               setVisibleSections((prev) => ({ ...prev, [key]: true }))
             }
@@ -1256,7 +1252,7 @@ const SidebarContent = memo(function SidebarContent({
   }, [])
 
   // Function to determine bonus level based on percentage
-  const getBonusLevel = (percentage) => {
+  const getProgressColor = (percentage: number) => {
     if (percentage >= 100) return "Excelente"
     if (percentage >= 90) return "Muy Bueno"
     if (percentage >= 80) return "Bueno"
@@ -1416,10 +1412,8 @@ const SidebarContent = memo(function SidebarContent({
         <div ref={sectionRefs.resumen} className="mt-6 pt-5 border-t border-green-100 transform-gpu">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center cursor-pointer flex-1 group" onClick={() => toggleSection("resumen")}>
-              <div className="h-1.5 w-5 bg-gradient-to-r from-emerald-400 to-green-500 rounded-full mr-2 group-hover:w-6 transition-all duration-300"></div>
-              <h3 className="text-sm font-medium text-gray-700 flex items-center group-hover:text-green-600 transition-colors">
-                Resumen de Rendimiento
-              </h3>
+              <div className="h-1.5 w-5 bg-gradient-to-br from-emerald-400 to-green-500 rounded-full mr-2 group-hover:w-6 transition-all duration-300"></div>
+              <div className="text-sm font-medium text-gray-700">{kilometersData?.lastMonthData?.monthName || "Kilómetros del Mes"}</div>
               <ChevronDown
                 className={cn(
                   "h-4 w-4 text-gray-400 transition-transform duration-300 ml-2 group-hover:text-green-500",
@@ -1487,7 +1481,7 @@ const SidebarContent = memo(function SidebarContent({
                           <Route className="h-5 w-5 text-white" />
                         </div>
                         <div>
-                          <h4 className="text-sm font-bold text-gray-800">Kilómetros</h4>
+                          <div className="text-sm font-medium text-gray-700">{kilometersData?.lastMonthData?.monthName || "Kilómetros del Mes"}</div>
                           <p className="text-xs text-gray-500">
                             {kilometersData?.lastMonthData?.monthName || lastMonthName}
                           </p>
@@ -1563,15 +1557,7 @@ const SidebarContent = memo(function SidebarContent({
                                 : "text-red-600"
                           }`}
                         >
-                          {kmPercentage >= 90
-                            ? "Excelente"
-                            : kmPercentage >= 80
-                              ? "Muy bueno"
-                              : kmPercentage >= 70
-                                ? "Bueno"
-                                : kmPercentage >= 50
-                                  ? "Regular"
-                                  : "Bajo"}
+                          {getProgressColor(kmPercentage)}
                         </span>
                       </div>
                     </div>
@@ -1588,7 +1574,7 @@ const SidebarContent = memo(function SidebarContent({
                         <TrendingUp className="h-5 w-5 text-white" />
                       </div>
                       <div>
-                        <h4 className="text-sm font-bold text-gray-800">Rendimiento Global</h4>
+                        <div className="text-2xl font-bold text-gray-800">{kilometersData?.summary?.totalExecuted?.toLocaleString("es-CO", { maximumFractionDigits: 0 }) || 0} km</div>
                         <p className="text-xs text-gray-500">Métricas combinadas</p>
                       </div>
                     </div>
@@ -1647,15 +1633,11 @@ const SidebarContent = memo(function SidebarContent({
                             </span>
                             <span className="text-xs font-bold tabular-nums text-gray-700">{kmPercentage}%</span>
                           </div>
-                          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                          <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
                             <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${kmPercentage}%` }}
-                              transition={{ duration: 0.8 }}
-                              className={`h-full rounded-full ${
-                                kmPercentage >= 80 ? "bg-green-500" : kmPercentage >= 60 ? "bg-amber-500" : "bg-red-500"
-                              }`}
-                            />
+                              className="bg-gradient-to-r from-green-400 to-emerald-500 h-2 rounded-full"
+                              style={{ width: `${kmPercentage}%` }}
+                            ></motion.div>
                           </div>
                         </div>
 
@@ -1736,7 +1718,7 @@ const SidebarContent = memo(function SidebarContent({
                           <div className="h-6 w-24 bg-gray-200 animate-pulse rounded"></div>
                         ) : (
                           <span className="text-xl font-extrabold text-gray-800 tabular-nums group-hover:text-green-600 transition-colors">
-                            {bonusValue > 0 ? formatCurrency(bonusValue) : "$0"}
+                            {formatCurrency(bonusValue)}
                           </span>
                         )}
                       </div>
@@ -1785,23 +1767,21 @@ const SidebarContent = memo(function SidebarContent({
                     </div>
 
                     {/* Información detallada del bono */}
-                    <div className="mt-4 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
+                    <div className="mt-4 p-2 bg-gray-50 rounded-lg border border-gray-100">
                       <div className="grid grid-cols-3 gap-2 text-xs">
                         <div>
-                          <div className="text-gray-500 dark:text-gray-400">Base</div>
-                          <div className="font-medium text-gray-800 dark:text-gray-200">
+                          <div className="text-gray-500">Base</div>
+                          <div className="font-medium text-gray-800">
                             {formatCurrency(bonusesData?.lastMonthData?.year >= 2025 ? 142000 : 130000)}
                           </div>
                         </div>
                         <div>
-                          <div className="text-gray-500 dark:text-gray-400">Final</div>
-                          <div className="font-medium text-gray-800 dark:text-gray-200">
-                            {formatCurrency(bonusValue)}
-                          </div>
+                          <div className="text-gray-500">Final</div>
+                          <div className="font-medium text-gray-800">{formatCurrency(bonusValue)}</div>
                         </div>
                         <div>
-                          <div className="text-gray-500 dark:text-gray-400">Porcentaje</div>
-                          <div className="font-medium text-gray-800 dark:text-gray-200">{bonusPercentage}%</div>
+                          <div className="text-gray-500">Porcentaje</div>
+                          <div className="font-medium text-gray-800">{bonusPercentage}%</div>
                         </div>
                       </div>
                     </div>
@@ -1819,7 +1799,7 @@ const SidebarContent = memo(function SidebarContent({
                                 : "text-red-600"
                           }`}
                         >
-                          {getBonusLevel(bonusPercentage)}
+                          {getProgressColor(bonusPercentage)}
                         </span>
                       </div>
 
@@ -1848,53 +1828,13 @@ const SidebarContent = memo(function SidebarContent({
                   </div>
                 </div>
 
-                {/* Upcoming activities or calendar preview */}
-                {upcomingActivities && upcomingActivities.length > 0 && (
-                  <div className="relative overflow-hidden bg-white rounded-xl transition-all duration-200 hover:shadow-md shadow-sm border border-green-100 transform-gpu">
-                    <div className="p-4">
-                      <div className="flex items-center mb-3">
-                        <div className="bg-gradient-to-br from-blue-500 to-indigo-400 p-2 rounded-lg mr-3 shadow-md">
-                          <Calendar className="h-5 w-5 text-white" />
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-bold text-gray-800">Próximas Actividades</h4>
-                          <p className="text-xs text-gray-500">Calendario</p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 mt-2">
-                        {upcomingActivities.slice(0, 2).map((activity) => (
-                          <div
-                            key={activity.id}
-                            className="flex items-start p-2 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors"
-                          >
-                            <div className="flex-shrink-0 bg-blue-100 rounded-md p-1.5 text-center mr-3 w-10">
-                              <div className="text-[10px] text-blue-600 uppercase font-bold">{activity.month}</div>
-                              <div className="text-sm font-bold text-blue-700">{activity.day}</div>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-gray-800 truncate">{activity.title}</p>
-                              <div className="flex items-center mt-1 text-[10px] text-gray-500">
-                                <div className="flex items-center mr-2">
-                                  <Clock className="h-2.5 w-2.5 mr-0.5" />
-                                  <span>{activity.time}</span>
-                                </div>
-                                <span className="truncate">{activity.location}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </motion.div>
             )}
           </AnimatePresence>
         </div>
       )}
 
-      {/* Contact buttons */}
+          {/* Contact buttons */}
       {!collapsed && (
         <div ref={sectionRefs.contacto} className="mt-6 flex justify-between transform-gpu">
           <ContactCard icon={Phone} tooltip="Llamar" />

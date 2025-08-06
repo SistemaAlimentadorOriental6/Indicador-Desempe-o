@@ -135,6 +135,7 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
   const [faultsLoading, setFaultsLoading] = useState(false)
   const [showFaultsMatrix, setShowFaultsMatrix] = useState(true)
   const [showFilters, setShowFilters] = useState(false)
+  const [faultDaysByYear, setFaultDaysByYear] = useState<{ [key: string]: { [year: number]: number } }>({})
   // Estado para el modal de detalle de faltas
   const [detalleFaltas, setDetalleFaltas] = useState<any[] | null>(null)
   const [detalleLoading, setDetalleLoading] = useState(false)
@@ -143,6 +144,26 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
   // Estado para el modal de tabla de deducciones
   const [showDeductionsTable, setShowDeductionsTable] = useState(false)
   const [selectedFaultCode, setSelectedFaultCode] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (data?.deductions) {
+      const daysByYear: { [key: string]: { [year: number]: number } } = {}
+
+      data.deductions.forEach(deduction => {
+        if (deduction.dias && deduction.dias > 0) {
+          const year = new Date(deduction.fechaInicio).getFullYear()
+          if (!daysByYear[deduction.codigo]) {
+            daysByYear[deduction.codigo] = {}
+          }
+          if (!daysByYear[deduction.codigo][year]) {
+            daysByYear[deduction.codigo][year] = 0
+          }
+          daysByYear[deduction.codigo][year] += deduction.dias
+        }
+      })
+      setFaultDaysByYear(daysByYear)
+    }
+  }, [data])
 
   // Inicializar con el año y mes actual
   useEffect(() => {
@@ -655,19 +676,33 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                                   </td>
                                   {faultsData.availableYears.map((year) => {
                                     const count = fault.years[year] || 0
+                                    const days = faultDaysByYear[fault.codigo]?.[year] || 0
                                     return (
                                       <td key={year} className="border border-slate-300 px-4 py-3 text-center">
                                         {count > 0 ? (
-                                          <button
-                                            className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-400 transition-all duration-200 hover:scale-110
-                                              ${count >= 5 ? "bg-red-500 text-white" : count >= 3 ? "bg-amber-500 text-white" : count >= 1 ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-400"}`}
-                                            title="Ver tabla de deducciones"
-                                            onClick={() => handleOpenDeductionsTable(fault.codigo)}
-                                          >
-                                            {count}
-                                          </button>
+                                          <div className="flex flex-col items-center">
+                                            <button
+                                              className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-400 transition-all duration-200 hover:scale-110
+                                                ${
+                                                  count >= 5
+                                                    ? "bg-red-500 text-white"
+                                                    : count >= 3
+                                                      ? "bg-amber-500 text-white"
+                                                      : count >= 1
+                                                        ? "bg-orange-500 text-white"
+                                                        : "bg-slate-100 text-slate-400"
+                                                }`}
+                                              title="Ver tabla de deducciones"
+                                              onClick={() => handleOpenDeductionsTable(fault.codigo)}
+                                            >
+                                              {count}
+                                            </button>
+                                            {days > 0 && (
+                                              <span className="text-xs text-slate-500 mt-1">({days}d)</span>
+                                            )}
+                                          </div>
                                         ) : (
-                                          <span className="text-slate-400 text-sm">-</span>
+                                          <span className="text-slate-400">-</span>
                                         )}
                                       </td>
                                     )

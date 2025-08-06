@@ -273,7 +273,7 @@ export default function MedicalApp() {
   const lastMonthYear = bonusesData?.lastMonthData?.year || new Date().getFullYear()
 
   // Sample data - memoizado para evitar recreaciones
-  const upcomingActivities = useMemo<Activity[]>(
+  const upcomingActivities = useMemo<Activity[]>( 
     () => [
       {
         id: 1,
@@ -323,6 +323,7 @@ export default function MedicalApp() {
     ],
     [],
   )
+
 
   // Animation variants - memoizados
   const cardVariants = useMemo(
@@ -434,7 +435,7 @@ export default function MedicalApp() {
       <div className="w-full mx-auto px-4 sm:px-6 py-8 relative z-0 lg:max-w-none lg:px-8">
         <div className="lg:grid lg:grid-cols-12 lg:gap-8">
           {/* Sidebar for desktop */}
-          {!isMobile && (
+          {!isMobile && user && (
             <SidebarOptimized
               user={user}
               profileImageUrl={profileImageUrl}

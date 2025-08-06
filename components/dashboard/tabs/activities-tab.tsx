@@ -21,7 +21,7 @@ export default function ActivitiesTabContent({
     <motion.div key="activities" variants={staggerList} initial="hidden" animate="visible">
       <div className="flex items-center gap-2 mb-4">
         <div className="h-1 w-5 bg-gradient-to-r from-green-500 to-emerald-400 rounded-full"></div>
-        <h3 className="text-gray-800 font-semibold">Próximas Actividades</h3>
+        <h3 className="text-gray-800 font-semibold">Próximas Actividadess</h3>
       </div>
 
       <div className="space-y-4">
