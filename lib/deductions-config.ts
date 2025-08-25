@@ -8,7 +8,7 @@ export interface DeductionRule {
 }
 
 export const DEDUCTION_RULES: DeductionRule[] = [
-  // Faltas que afectan rendimiento
+  // Novedades que afectan rendimiento
   { item: '1', causa: 'Incapacidad', porcentajeRetirar: 0.25, valorActual: 35500, observacion: 'Sí', afectaDesempeno: true },
   { item: '2', causa: 'Ausentismo', porcentajeRetirar: 1.00, valorActual: 142000, observacion: 'Sí', afectaDesempeno: true },
   { item: '5', causa: 'Retardo', porcentajeRetirar: 0.25, valorActual: 35500, observacion: 'Sí', afectaDesempeno: true },
@@ -17,7 +17,7 @@ export const DEDUCTION_RULES: DeductionRule[] = [
   { item: '10', causa: 'Restricción', porcentajeRetirar: 1.00, valorActual: 142000, observacion: 'Sí', afectaDesempeno: true },
   { item: '12', causa: 'Retardo por Horas', porcentajeRetirar: 0.50, valorActual: 71000, observacion: 'Sí', afectaDesempeno: true },
   
-  // Faltas que NO afectan rendimiento
+  // Novedades que NO afectan rendimiento
   { item: '3', causa: 'Incapacidad > 7 días', porcentajeRetirar: 'Día', valorActual: 4733, observacion: 'No Afecta Desempeño', afectaDesempeno: false },
   { item: '4', causa: 'Calamidad', porcentajeRetirar: 'Día', valorActual: 4733, observacion: 'No Afecta Desempeño', afectaDesempeno: false },
   { item: '7', causa: 'Vacaciones', porcentajeRetirar: 'Día', valorActual: 4733, observacion: 'No Afecta Desempeño', afectaDesempeno: false },
@@ -25,7 +25,7 @@ export const DEDUCTION_RULES: DeductionRule[] = [
   { item: '11', causa: 'Día No Remunerado', porcentajeRetirar: 'Día', valorActual: 4733, observacion: 'No Afecta Desempeño', afectaDesempeno: false },
   { item: '13', causa: 'Día No Remunerado por Horas', porcentajeRetirar: 0, valorActual: 0, observacion: 'No Afecta Desempeño', afectaDesempeno: false },
 
-  // Desincentivos y Faltas (afectan rendimiento)
+  // Desincentivos y Novedades (afectan rendimiento)
   { item: 'DL', causa: 'Daño Leve', porcentajeRetirar: 0.25, valorActual: 35500, observacion: 'Sí', afectaDesempeno: true },
   { item: 'DG', causa: 'Daño Grave', porcentajeRetirar: 0.50, valorActual: 71000, observacion: 'Sí', afectaDesempeno: true },
   { item: 'DGV', causa: 'Daño Gravísimo', porcentajeRetirar: 1.00, valorActual: 142000, observacion: 'Sí', afectaDesempeno: true },

@@ -179,6 +179,7 @@ interface OperatorDetailModalProps {
 export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = ({ operator, onClose }) => {
   const [activeTab, setActiveTab] = useState<"overview" | "kilometers" | "bonuses">("overview")
   const [imageError, setImageError] = useState(false)
+  const [showImageModal, setShowImageModal] = useState(false)
 
   const [currentOperator, setCurrentOperator] = useState<Operator>(operator)
   const [isLoading, setIsLoading] = useState(false)
@@ -188,6 +189,7 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
 
   const [selectedYear, setSelectedYear] = useState<number>()
   const [selectedMonth, setSelectedMonth] = useState<number>()
+  const [filterType, setFilterType] = useState<'month' | 'year'>('month')
   const [availableDates, setAvailableDates] = useState<{ years: number[]; months: { [year: number]: number[] } }>({ years: [], months: {} });
   const [areDatesLoading, setAreDatesLoading] = useState(true);
 
@@ -253,15 +255,21 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!operator.codigo || !selectedYear || !selectedMonth) return
+      if (!operator.codigo || !selectedYear) return
+      if (filterType === 'month' && !selectedMonth) return
 
       setIsLoading(true)
       try {
-        const response = await fetch(
-          `/api/user/rankings?filterType=month&filterValue=${selectedYear}-${String(
+        let apiUrl = ''
+        if (filterType === 'year') {
+          apiUrl = `/api/user/rankings?filterType=year&filterValue=${selectedYear}&userCode=${operator.codigo}`
+        } else {
+          apiUrl = `/api/user/rankings?filterType=month&filterValue=${selectedYear}-${String(
             selectedMonth,
-          ).padStart(2, "0")}&userCode=${operator.codigo}`,
-        )
+          ).padStart(2, "0")}&userCode=${operator.codigo}`
+        }
+        
+        const response = await fetch(apiUrl)
         if (!response.ok) throw new Error("La respuesta de la red no fue correcta")
 
         const result = await response.json()
@@ -269,7 +277,8 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
         if (result.success && result.data && result.data.length > 0) {
           setCurrentOperator(result.data[0])
         } else {
-          console.warn(`No se encontraron datos para ${selectedYear}-${selectedMonth}`)
+          const periodText = filterType === 'year' ? `año ${selectedYear}` : `${selectedYear}-${selectedMonth}`
+          console.warn(`No se encontraron datos para ${periodText}`)
           setCurrentOperator({
             ...operator,
             bonus: {
@@ -302,7 +311,7 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
     if (activeTab === "overview") {
       fetchData()
     }
-  }, [selectedYear, selectedMonth, operator.codigo, activeTab])
+  }, [selectedYear, selectedMonth, filterType, operator.codigo, activeTab])
 
   useEffect(() => {
     // Si el año seleccionado es el año actual, asegurarse de que el mes seleccionado no sea futuro
@@ -412,6 +421,12 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
     setImageError(true)
   }
 
+  const handleImageClick = () => {
+    if (employeeImageUrl && !imageError) {
+      setShowImageModal(true)
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -443,7 +458,11 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
               <div className="flex items-center gap-4 flex-1">
                 <div className="relative">
                   {employeeImageUrl && !imageError ? (
-                    <div className="w-20 h-20 relative rounded-2xl overflow-hidden shadow-lg border-3 border-white">
+                    <div 
+                      className="w-20 h-20 relative rounded-2xl overflow-hidden shadow-lg border-3 border-white cursor-pointer hover:shadow-xl transition-all duration-200 hover:scale-105"
+                      onClick={handleImageClick}
+                      title="Click para ver imagen completa"
+                    >
                       <Image
                         src={employeeImageUrl || "/placeholder.svg"}
                         alt={operator.name || "Foto del operador"}
@@ -569,7 +588,9 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
                 >
                   <div className="text-center">
                     <div className="text-3xl font-bold mb-1">{currentOperator.efficiency.toFixed(1)}%</div>
-                    <div className="text-white/90 text-sm font-medium mb-2">Eficiencia Mensual</div>
+                    <div className="text-white/90 text-sm font-medium mb-2">
+                      Eficiencia {filterType === 'year' ? 'Anual' : 'Mensual'}
+                    </div>
                     <div className="inline-flex items-center gap-1 px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-semibold">
                       <performanceLevel.icon className="w-3 h-3" />
                       <span>{performanceLevel.level}</span>
@@ -650,16 +671,37 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
                         <Activity className="w-5 h-5 text-emerald-600" />
                         Indicadores Clave de Rendimiento
                       </h2>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Selector de tipo de filtro */}
+                        <Select
+                          value={filterType}
+                          onValueChange={(value: 'month' | 'year') => {
+                            setFilterType(value);
+                            if (value === 'year') {
+                              setSelectedMonth(undefined);
+                            } else if (selectedYear && availableDates.months[selectedYear] && availableDates.months[selectedYear].length > 0) {
+                              setSelectedMonth(availableDates.months[selectedYear][0]);
+                            }
+                          }}
+                          disabled={isLoading || areDatesLoading}
+                        >
+                          <SelectTrigger className="w-[100px] bg-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="month">Mes</SelectItem>
+                            <SelectItem value="year">Año</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        
+                        {/* Selector de año */}
                         <Select
                           value={selectedYear ? String(selectedYear) : ''}
                           onValueChange={(value) => {
                             const newYear = Number(value);
                             setSelectedYear(newYear);
-                            if (availableDates.months[newYear] && availableDates.months[newYear].length > 0) {
+                            if (filterType === 'month' && availableDates.months[newYear] && availableDates.months[newYear].length > 0) {
                               setSelectedMonth(availableDates.months[newYear][0]);
-                            } else {
-                              setSelectedMonth(undefined);
                             }
                           }}
                           disabled={isLoading || areDatesLoading}
@@ -675,24 +717,28 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
                             ))}
                           </SelectContent>
                         </Select>
-                        <Select
-                          value={selectedMonth ? String(selectedMonth) : ''}
-                          onValueChange={(value) => setSelectedMonth(Number(value))}
-                          disabled={isLoading || areDatesLoading || !selectedYear}
-                        >
-                          <SelectTrigger className="w-[140px] bg-white">
-                            <SelectValue placeholder="Mes" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(availableDates.months[selectedYear!] || []).map((month) => (
-                              <SelectItem key={month} value={String(month)}>
-                                {new Date(0, month - 1).toLocaleString("es-CO", {
-                                  month: "long",
-                                })}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        
+                        {/* Selector de mes (solo visible cuando filterType es 'month') */}
+                        {filterType === 'month' && (
+                          <Select
+                            value={selectedMonth ? String(selectedMonth) : ''}
+                            onValueChange={(value) => setSelectedMonth(Number(value))}
+                            disabled={isLoading || areDatesLoading || !selectedYear}
+                          >
+                            <SelectTrigger className="w-[140px] bg-white">
+                              <SelectValue placeholder="Mes" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(availableDates.months[selectedYear!] || []).map((month) => (
+                                <SelectItem key={month} value={String(month)}>
+                                  {new Date(0, month - 1).toLocaleString("es-CO", {
+                                    month: "long",
+                                  })}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                       </div>
                     </div>
 
@@ -714,7 +760,9 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
                             style={{ width: `${bonusPercentClamped}%` }}
                           />
                         </div>
-                        <div className="mt-2 text-xs text-slate-500">Bonos Totales</div>
+                        <div className="mt-2 text-xs text-slate-500">
+                          Bonos {filterType === 'year' ? 'Anuales' : 'Mensuales'}
+                        </div>
                       </div>
 
                       {/* Kilómetros Card */}
@@ -734,7 +782,9 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
                             style={{ width: `${kmEfficiencyClamped}%` }}
                           />
                         </div>
-                        <div className="mt-2 text-xs text-slate-500">Kilómetros Ejecutados</div>
+                        <div className="mt-2 text-xs text-slate-500">
+                          Kilómetros {filterType === 'year' ? 'Anuales' : 'Mensuales'}
+                        </div>
                       </div>
 
                       {/* Consistencia Card */}
@@ -754,7 +804,9 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
                             style={{ width: `${consistency}%` }}
                           />
                         </div>
-                        <div className="mt-2 text-xs text-slate-500">Consistencia Semanal</div>
+                        <div className="mt-2 text-xs text-slate-500">
+                          Consistencia {filterType === 'year' ? 'Anual' : 'Semanal'}
+                        </div>
                       </div>
                     </div>
                   </section>
@@ -882,6 +934,63 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
           </div>
         </main>
       </div>
+
+      {/* Modal de Imagen */}
+      {showImageModal && employeeImageUrl && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+          onClick={() => setShowImageModal(false)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] w-full h-full flex items-center justify-center">
+            {/* Botón de cerrar */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowImageModal(false)
+              }}
+              className="absolute top-4 right-4 z-10 p-3 bg-black/50 hover:bg-black/70 rounded-full transition-all duration-200 text-white"
+              aria-label="Cerrar imagen"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            
+            {/* Imagen */}
+            <div className="relative w-full h-full flex items-center justify-center">
+              <Image
+                src={employeeImageUrl}
+                alt={operator.name || "Foto del operador"}
+                width={800}
+                height={800}
+                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                priority
+              />
+            </div>
+            
+            {/* Información del empleado */}
+            <div className="absolute bottom-4 left-4 right-4 bg-black/70 backdrop-blur-sm rounded-xl p-4 text-white">
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold">{operator.name}</h3>
+                  <div className="flex items-center gap-4 text-sm text-white/80 mt-1">
+                    {operator.position && (
+                      <span>{operator.position}</span>
+                    )}
+                    <span>Cédula: {operator.cedula || operator.document || "N/A"}</span>
+                    {operator.zona && (
+                      <span>Zona: {operator.zona}</span>
+                    )}
+                  </div>
+                </div>
+                {operator.category === "Oro" && (
+                  <div className="w-8 h-8 bg-gradient-to-r from-yellow-400 to-yellow-500 rounded-full flex items-center justify-center">
+                    <Crown className="w-4 h-4 text-white" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

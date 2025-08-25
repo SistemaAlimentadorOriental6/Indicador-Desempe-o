@@ -28,7 +28,7 @@ class FaultsService {
     return FaultsService.instance
   }
 
-  // Obtener faltas para un usuario específico
+  // Obtener Novedades para un usuario específico
   async getUserFaults(params: {
     userCode: string
     year?: number
@@ -53,12 +53,12 @@ class FaultsService {
     return result
   }
 
-  // Obtener datos de faltas de la base de datos
+  // Obtener datos de Novedades de la base de datos
   private async fetchFaultsFromDB(params: {
     userCode: string
     year?: number
   }): Promise<FaultsData> {
-    // Construir consulta para obtener faltas por año
+    // Construir consulta para obtener Novedades por año
     let query = `
       SELECT 
         codigo_factor,
@@ -110,7 +110,7 @@ class FaultsService {
     }, {} as Record<string, string>);
 
 
-    // Agrupar faltas por código
+    // Agrupar Novedades por código
     const faultsByCode: Record<string, { [year: number]: number }> = {}
 
     faultsByYear.forEach((fault) => {
@@ -130,7 +130,7 @@ class FaultsService {
       totalByYear[year] += count
     })
 
-    // Crear registros de faltas
+    // Crear registros de Novedades
     Object.entries(faultsByCode).forEach(([code, years]) => {
       faultRecords.push({
         codigo: code,
@@ -152,7 +152,7 @@ class FaultsService {
     await this.cache.delete(cacheKey)
   }
 
-  // Obtener detalles de faltas para un usuario, código y año
+  // Obtener detalles de Novedades para un usuario, código y año
   async getUserFaultDetails(params: {
     userCode: string
     code: string

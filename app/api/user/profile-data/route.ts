@@ -62,37 +62,29 @@ export async function GET(request: Request) {
 
     try {
       // Intentar obtener datos reales de las bases de datos
-      ;[zonaData, cargoData] = await Promise.all([fetchZonaData(cedulas), fetchCargoData(cedulas)])
+      ;[zonaData, cargoData] = await Promise.all([fetchMysqlData(cedulas), fetchCargoData(cedulas)])
       console.log("Datos obtenidos de las bases de datos:", { zonaData, cargoData })
     } catch (dbError) {
       console.error("Error al consultar bases de datos:", dbError)
-      // Si hay un error con las bases de datos, usar datos de prueba
-      console.log("Usando datos de prueba para desarrollo")
+      // Si hay un error con las bases de datos, se usarán valores por defecto.
     }
 
     // Combinar los resultados
     const profileData = cedulas.map((cedula) => {
       // Buscar datos en los resultados de las consultas
       // Convertir a string para comparación segura
-      const zona = zonaData.find((z) => String(z.cedula) === String(cedula))?.zona || null
+      const mysqlResult = zonaData.find((z) => String(z.cedula) === String(cedula))
+      const zona = mysqlResult?.zona || null
+      const padrino = mysqlResult?.padrino || null
       const cargo = cargoData.find((c) => String(c.cedula) === String(cedula))?.cargo || null
 
-      console.log(`Procesando cédula ${cedula}:`, { zonaEncontrada: zona, cargoEncontrado: cargo })
-
-      // Si ambos son null y tenemos datos de prueba, usarlos
-      if ((zona === null || cargo === null) && mockData[cedula]) {
-        console.log(`Usando datos de prueba para cédula ${cedula}:`, mockData[cedula])
-        return {
-          cedula,
-          zona: zona || mockData[cedula].zona,
-          cargo: cargo || mockData[cedula].cargo,
-        }
-      }
+      console.log(`Procesando cédula ${cedula}:`, { zonaEncontrada: zona, cargoEncontrado: cargo, padrinoEncontrado: padrino })
 
       return {
         cedula,
         zona: zona || "Zona no especificada",
         cargo: cargo || "Cargo no especificado",
+        padrino: padrino || "Padrino no asignado",
       }
     })
 
@@ -111,7 +103,7 @@ export async function GET(request: Request) {
 }
 
 // Función para obtener datos de zona desde MySQL
-async function fetchZonaData(cedulas: string[]) {
+async function fetchMysqlData(cedulas: string[]) {
   let connection
   try {
     connection = await mysql.createConnection(mysqlConfig)
@@ -125,7 +117,7 @@ async function fetchZonaData(cedulas: string[]) {
 
     // Consulta SQL - Ajustar según la estructura real de la base de datos
     // Nota: Asegúrate de que los nombres de tabla y columna sean correctos
-    const query = `SELECT cedula, zona FROM operadores_sao6 WHERE cedula IN (${placeholders})`
+    const query = `SELECT cedula, zona, padrino FROM operadores_sao6 WHERE cedula IN (${placeholders})`
     console.log("Ejecutando consulta MySQL:", query, "con parámetros:", cedulas)
 
     const [rows] = await connection.execute(query, cedulas)

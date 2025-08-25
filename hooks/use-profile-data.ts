@@ -6,6 +6,8 @@ interface ProfileData {
   cedula: string
   zona: string
   cargo: string
+  padrino: string
+  codigo?: string // Añadido opcionalmente para evitar errores
 }
 
 export function useProfileData(cedula?: string) {
@@ -42,6 +44,7 @@ export function useProfileData(cedula?: string) {
             cedula: cedulaStr,
             zona: "Zona no disponible",
             cargo: "Cargo no disponible",
+            padrino: "Padrino no disponible",
           })
           return
         }
@@ -60,6 +63,7 @@ export function useProfileData(cedula?: string) {
             cedula: cedulaStr,
             zona: "Zona no disponible",
             cargo: "Cargo no disponible",
+            padrino: "Padrino no disponible",
           })
         }
       } catch (err) {
@@ -70,6 +74,7 @@ export function useProfileData(cedula?: string) {
           cedula: String(cedula),
           zona: "Zona no disponible",
           cargo: "Cargo no disponible",
+          padrino: "Padrino no disponible",
         })
       } finally {
         setIsLoading(false)

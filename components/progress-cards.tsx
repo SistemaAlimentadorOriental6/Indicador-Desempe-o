@@ -1,41 +1,15 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import {
-  Route,
-  Gift,
-  Award,
-  TrendingUp,
-  Clock,
-  AlertTriangle,
-  Sparkles,
-  Zap,
-  Target,
-  CheckCircle2,
-  Star,
-  Calendar,
-  ArrowLeft,
-  ArrowRight,
-  RefreshCw,
-} from "lucide-react"
+import { useRef } from "react"
+import type React from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
+import { motion } from "framer-motion"
+import { DollarSign, TrendingUp, AlertTriangle, RefreshCw, Target, BarChart3, Car } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TooltipProvider } from "@/components/ui/tooltip"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 // Debug flag - set to true to enable debug mode
 const DEBUG_MODE = false
@@ -153,29 +127,29 @@ interface ProgressCardsProps {
   error?: string
 }
 
-// Create a client
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      cacheTime: 10 * 60 * 1000, // 10 minutes
-      refetchOnWindowFocus: false,
-      retry: 1,
+const cardVariants = {
+  initial: { y: 30, opacity: 0, scale: 0.95 },
+  animate: {
+    y: 0,
+    opacity: 1,
+    scale: 1,
+    transition: {
+      type: "spring",
+      stiffness: 200,
+      damping: 20,
+      duration: 0.6,
     },
   },
-})
-
-// Animation variants
-const cardVariants = {
-  initial: { y: 20, opacity: 0 },
-  animate: { y: 0, opacity: 1, transition: { type: "spring", stiffness: 300, damping: 24 } },
-  hover: { y: -5, transition: { duration: 0.3 } },
+  hover: {
+    y: -8,
+    scale: 1.02,
+    transition: { duration: 0.3, ease: "easeOut" },
+  },
 }
 
-// Decorative pattern component with enhanced animations
 function DecorativePattern({
   className = "",
-  variant = "dots" | "grid" | "waves" | "circles",
+  variant = "dots",
   color = "currentColor",
 }: {
   className?: string
@@ -184,12 +158,12 @@ function DecorativePattern({
 }) {
   if (variant === "waves") {
     return (
-      <div className={`absolute inset-0 overflow-hidden opacity-10 pointer-events-none ${className}`}>
+      <div className={`absolute inset-0 overflow-hidden opacity-5 pointer-events-none ${className}`}>
         <svg viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
           <motion.path
             d="M 0 1000 Q 250 850 500 1000 Q 750 850 1000 1000 L 1000 0 L 0 0 Z"
             fill={color}
-            opacity="0.2"
+            opacity="0.3"
             animate={{
               d: [
                 "M 0 1000 Q 250 850 500 1000 Q 750 850 1000 1000 L 1000 0 L 0 0 Z",
@@ -197,60 +171,22 @@ function DecorativePattern({
                 "M 0 1000 Q 250 850 500 1000 Q 750 850 1000 1000 L 1000 0 L 0 0 Z",
               ],
             }}
-            transition={{ repeat: Number.POSITIVE_INFINITY, duration: 10, ease: "easeInOut" }}
+            transition={{ repeat: Number.POSITIVE_INFINITY, duration: 12, ease: "easeInOut" }}
           />
-          <motion.path
-            d="M 0 1000 Q 250 950 500 1000 Q 750 950 1000 1000 L 1000 100 L 0 100 Z"
-            fill={color}
-            opacity="0.3"
-            animate={{
-              d: [
-                "M 0 1000 Q 250 950 500 1000 Q 750 950 1000 1000 L 1000 100 L 0 100 Z",
-                "M 0 1000 Q 250 920 500 1000 Q 750 920 1000 1000 L 1000 100 L 0 100 Z",
-                "M 0 1000 Q 250 950 500 1000 Q 750 950 1000 1000 L 1000 100 L 0 100 Z",
-              ],
-            }}
-            transition={{ repeat: Number.POSITIVE_INFINITY, duration: 8, ease: "easeInOut", delay: 0.5 }}
-          />
-        </svg>
-      </div>
-    )
-  }
-
-  if (variant === "circles") {
-    return (
-      <div className={`absolute inset-0 overflow-hidden opacity-10 pointer-events-none ${className}`}>
-        <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="circles" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-              <motion.circle
-                cx="20"
-                cy="20"
-                r="3"
-                fill={color}
-                animate={{ r: [3, 4, 3] }}
-                transition={{ repeat: Number.POSITIVE_INFINITY, duration: 3, ease: "easeInOut" }}
-              />
-            </pattern>
-          </defs>
-          <rect x="0" y="0" width="100%" height="100%" fill="url(#circles)" />
         </svg>
       </div>
     )
   }
 
   return (
-    <div className={`absolute inset-0 overflow-hidden opacity-10 pointer-events-none ${className}`}>
+    <div className={`absolute inset-0 overflow-hidden opacity-5 pointer-events-none ${className}`}>
       <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <pattern id="dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
             <circle cx="2" cy="2" r="1" fill={color} />
           </pattern>
-          <pattern id="grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke={color} strokeWidth="0.5" />
-          </pattern>
         </defs>
-        <rect x="0" y="0" width="100%" height="100%" fill={`url(#${variant === "grid" ? "grid" : "dots"})`} />
+        <rect x="0" y="0" width="100%" height="100%" fill="url(#dots)" />
       </svg>
     </div>
   )
@@ -332,30 +268,26 @@ const api = {
     let url = `/api/user/kilometers?codigo=${userCode}`
     if (year) url += `&year=${year}`
     if (month) url += `&month=${month}`
-    url += `&_t=${Date.now()}`
 
     const response = await fetch(url)
     if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Error del servidor: ${response.status} ${response.statusText}`)
+      throw new Error(`Error del servidor: ${response.status}`)
     }
 
     const responseData = await response.json()
-    
-    // Manejar el nuevo formato de respuesta estandarizada
     if (!responseData.success) {
-      throw new Error(responseData.error || responseData.message || "Error al cargar los datos")
+      throw new Error(responseData.error || "Error al cargar los datos")
     }
 
-    // Los datos ahora vienen en responseData.data
     const apiData = responseData.data || {}
-    
-    // Process data - los datos ya vienen procesados desde el servicio
     const processedData = (apiData.data || []).map((item: MonthData) => ({
       ...item,
-      // Asegurar que el percentage esté calculado
-      percentage: item.percentage !== undefined ? item.percentage : 
-        (item.valor_programacion > 0 ? Math.round((item.valor_ejecucion / item.valor_programacion) * 100) : 0),
+      percentage:
+        item.percentage !== undefined
+          ? item.percentage
+          : item.valor_programacion > 0
+            ? Math.round((item.valor_ejecucion / item.valor_programacion) * 100)
+            : 0,
     }))
 
     return {
@@ -370,161 +302,111 @@ const api = {
     let url = `/api/user/bonuses?codigo=${userCode}`
     if (year) url += `&year=${year}`
     if (month) url += `&month=${month}`
-    url += `&_t=${Date.now()}`
 
     const response = await fetch(url)
     if (!response.ok) {
-      throw new Error(`Error del servidor: ${response.status} ${response.statusText}`)
+      throw new Error(`Error del servidor: ${response.status}`)
     }
 
-    // Parse the JSON data
     const responseData = await response.json()
-    
-    // Manejar el nuevo formato de respuesta estandarizada
     if (!responseData.success) {
-      throw new Error(responseData.error || responseData.message || "Error al cargar los datos de bonos")
+      throw new Error(responseData.error || "Error al cargar los datos de bonos")
     }
 
-    // Los datos ahora vienen en responseData.data
     const data = responseData.data || {}
 
-    // Filtrar deducciones duplicadas por fecha
-    let filteredDeductions = data.deductions || []
-    if (filteredDeductions.length > 0) {
-      // Crear un mapa para agrupar por fecha
-      const deductionsByDate = new Map()
+    // If the response is for a single month, the data is directly in `data`
+    if (month && data && !data.availableYears) {
+      const monthData = {
+        year: year,
+        month: month,
+        monthName: getMonthName(month),
+        bonusValue: data.baseBonus,
+        deductionAmount: data.deductionAmount,
+        finalValue: data.finalBonus,
+        ...data, // include any other properties from the response
+      }
 
-      filteredDeductions.forEach((deduction) => {
-        const dateKey = deduction.fechaInicio // Usar la fecha como clave
-
-        // Si ya existe una entrada para esta fecha, mantener solo la más reciente (asumiendo que el ID más alto es más reciente)
-        if (!deductionsByDate.has(dateKey) || deductionsByDate.get(dateKey).id < deduction.id) {
-          deductionsByDate.set(dateKey, deduction)
-        }
-      })
-
-      // Convertir el mapa de vuelta a un array
-      filteredDeductions = Array.from(deductionsByDate.values())
+      return {
+        monthlyBonusData: [monthData],
+        // Also return available years/months if they are part of the initial data state
+        // This part depends on how you want to handle state updates.
+        // For now, we focus on returning the single month data correctly formatted.
+      }
     }
 
-    // Calcular correctamente el monto de deducción total
-    const totalDeduction =
-      filteredDeductions.length > 0 ? filteredDeductions.reduce((sum, deduction) => sum + deduction.monto, 0) : 0
-
-    // Si no hay deducciones, asegurar que el bono sea 100%
-    const baseBonus = data.baseBonus || data.summary?.totalProgrammed || 130000
-    const finalBonus =
-      filteredDeductions.length === 0
-        ? baseBonus
-        : (data.baseBonus && totalDeduction ? data.baseBonus - totalDeduction : data.finalBonus) ||
-          data.summary?.totalExecuted ||
-          130000
-
-    // Create monthly data from lastMonthData if available
-    let monthlyBonusData = []
-    if (data.lastMonthData && data.lastMonthData.year) {
-      monthlyBonusData = [
-        {
-          year: data.lastMonthData.year,
-          month: data.lastMonthData.month,
-          monthName: data.lastMonthData.monthName || getMonthName(data.lastMonthData.month),
-          bonusValue: data.lastMonthData.bonusValue || baseBonus,
-          deductionAmount: data.lastMonthData.deductionAmount || totalDeduction || 0,
-          finalValue:
-            data.lastMonthData.finalValue ||
-            (data.lastMonthData.bonusValue && data.lastMonthData.deductionAmount
-              ? data.lastMonthData.bonusValue - data.lastMonthData.deductionAmount
-              : finalBonus),
-        },
-      ]
-    }
+    const filteredDeductions = data.deductions || []
+    const totalDeduction = filteredDeductions.reduce(
+      (sum: number, deduction: { monto: number }) => sum + deduction.monto,
+      0,
+    )
+    const baseBonus = data.baseBonus || 130000
+    const finalBonus = filteredDeductions.length === 0 ? baseBonus : baseBonus - totalDeduction
 
     return {
       bonusData: {
-        baseBonus: baseBonus,
-        deductionPercentage:
-          filteredDeductions.length === 0
-            ? 0
-            : data.deductionPercentage ||
-              (data.baseBonus && totalDeduction
-                ? Math.round((totalDeduction / data.baseBonus) * 100)
-                : data.summary && data.summary.percentage !== undefined
-                  ? 100 - data.summary.percentage
-                  : 0),
-        deductionAmount:
-          filteredDeductions.length === 0
-            ? 0
-            : totalDeduction ||
-              data.deductionAmount ||
-              (data.summary?.totalProgrammed && data.summary?.totalExecuted
-                ? data.summary.totalProgrammed - data.summary.totalExecuted
-                : 0),
-        finalBonus: finalBonus,
-        expiresInDays: data.expiresInDays || null,
-        bonusesByYear: data.bonusesByYear || {},
-        deductions: filteredDeductions,
-        lastMonthData: data.lastMonthData || null,
         availableYears: data.availableYears || [],
         availableMonths: data.availableMonths || [],
-        summary: data.summary || null,
+        lastMonthData: data.lastMonthData || null,
       },
-      monthlyBonusData,
+      monthlyBonusData: data.monthlyBonusData || [],
+      summary: {
+        baseBonus,
+        finalBonus,
+        totalDeduction,
+        deductions: filteredDeductions,
+      },
     }
   },
 }
 
-// Enhanced KilometersCard component with React Query
-function KilometersCard({
-  userCode,
-}: {
-  userCode: string
-}) {
-  const [isHovered, setIsHovered] = useState(false)
+const KilometersCard: React.FC<{ userCode: string }> = ({ userCode }) => {
+  const [data, setData] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedYear, setSelectedYear] = useState<number | null>(null)
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null)
-  const queryClient = useQueryClient()
 
-  // Main query for kilometers data
-  const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ["kilometers", userCode, selectedYear, selectedMonth],
-    queryFn: () =>
-      api.fetchKilometers({
+  const fetchData = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      const result = await api.fetchKilometers({
         userCode,
         year: selectedYear || undefined,
         month: selectedMonth || undefined,
-      }),
-    onSuccess: (data) => {
-      // Set default selections if not already set
-      if (!selectedYear && data.availableYears && data.availableYears.length) {
-        setSelectedYear(data.availableYears[0])
-      }
+      })
+      setData(result)
 
-      if (!selectedMonth && data.availableMonths && data.availableMonths.length) {
-        setSelectedMonth(data.availableMonths[data.availableMonths.length - 1])
+      // Set defaults if not set
+      if (!selectedYear && result.availableYears?.length) {
+        setSelectedYear(result.availableYears[0])
       }
-    },
-  })
+      if (!selectedMonth && result.availableMonths?.length) {
+        setSelectedMonth(result.availableMonths[result.availableMonths.length - 1])
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error desconocido")
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-  // Find current month data
+  useEffect(() => {
+    if (userCode) {
+      fetchData()
+    }
+  }, [userCode, selectedYear, selectedMonth])
+
   const currentMonthData = useMemo(() => {
     if (!data?.monthlyData) return null
-
     if (selectedYear && selectedMonth) {
       return (
         data.monthlyData.find((item: MonthData) => item.year === selectedYear && item.month === selectedMonth) || null
       )
-    } else if (data.monthlyData.length > 0) {
-      return data.monthlyData[0]
     }
-
-    return null
-  }, [data?.monthlyData, selectedYear, selectedMonth])
-
-  // Handle refresh data
-  const handleRefreshData = () => {
-    if (isFetching) return
-    refetch()
-  }
+    return data.monthlyData[0] || null
+  }, [data, selectedYear, selectedMonth])
 
   // Use either currently selected month data or fallback to summary
   const displayData = currentMonthData || {
@@ -602,7 +484,7 @@ function KilometersCard({
         </CardHeader>
         <CardContent className="pb-4">
           <p className="text-gray-600">{error instanceof Error ? error.message : "Error desconocido"}</p>
-          <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
+          <Button variant="outline" size="sm" className="mt-4 bg-transparent" onClick={() => fetchData()}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Reintentar
           </Button>
@@ -617,569 +499,424 @@ function KilometersCard({
       initial="initial"
       animate="animate"
       whileHover="hover"
-      onHoverStart={() => setIsHovered(true)}
-      onHoverEnd={() => setIsHovered(false)}
-      className="relative bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg overflow-hidden"
+      className="w-full h-full"
     >
-      <DecorativePattern variant="waves" />
+      <Card className="relative bg-gradient-to-br from-white via-green-50/30 to-white border-2 border-green-100 shadow-xl overflow-hidden backdrop-blur-sm h-full flex flex-col">
+        <DecorativePattern variant="waves" color="#10b981" />
 
-      {/* Decorative elements with enhanced animations */}
-      <motion.div
-        className="absolute top-0 right-0 w-32 h-32 -mt-10 -mr-10 bg-white/10 rounded-full blur-2xl"
-        animate={{
-          scale: [1, 1.05, 1],
-          opacity: [0.5, 0.7, 0.5],
-        }}
-        transition={{
-          repeat: Number.POSITIVE_INFINITY,
-          duration: 5,
-          ease: "easeInOut",
-        }}
-      />
-      <motion.div
-        className="absolute bottom-0 left-0 w-24 h-24 -mb-8 -ml-8 bg-white/10 rounded-full blur-xl"
-        animate={{
-          scale: [1, 1.1, 1],
-          opacity: [0.3, 0.5, 0.3],
-        }}
-        transition={{
-          repeat: Number.POSITIVE_INFINITY,
-          duration: 4,
-          ease: "easeInOut",
-          delay: 1,
-        }}
-      />
+        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-green-200/20 to-green-300/10 rounded-full blur-3xl -translate-y-16 translate-x-16" />
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-green-100/30 to-green-200/20 rounded-full blur-2xl translate-y-12 -translate-x-12" />
 
-      {/* Animated particles */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {[...Array(8)].map((_, i) => (
-          <motion.div
-            key={i}
-            className="absolute w-1 h-1 bg-white/40 rounded-full"
-            style={{
-              top: `${Math.random() * 100}%`,
-              left: `${Math.random() * 100}%`,
-            }}
-            animate={{
-              y: [0, -20, 0],
-              opacity: [0, 1, 0],
-              scale: [0.8, 1.2, 0.8],
-            }}
-            transition={{
-              duration: 2 + Math.random() * 2,
-              repeat: Number.POSITIVE_INFINITY,
-              delay: Math.random() * 5,
-            }}
-          />
-        ))}
-      </div>
+        <CardHeader className="pb-3 relative z-10 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg">
+                <Car className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-lg font-bold bg-gradient-to-r from-green-700 to-green-600 bg-clip-text text-transparent">
+                  Kilómetros
+                </CardTitle>
+                <CardDescription className="text-green-600/70 font-medium text-sm">
+                  {displayData.monthName} {displayData.year}
+                </CardDescription>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchData}
+              disabled={isLoading}
+              className="h-9 px-3 border-green-200 hover:bg-green-50 bg-white/80 backdrop-blur-sm shadow-sm"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""} text-green-600`} />
+            </Button>
+          </div>
+        </CardHeader>
 
-      <CardHeader className="pb-2 text-white relative z-10">
-        <div className="flex justify-between items-start">
-          <div>
-            <CardTitle className="text-xl flex items-center">
-              <Route className="h-5 w-5 mr-2" />
-              <span className="flex items-center">
-                Kilómetros Mensuales
-                <Badge className="ml-2 bg-white/20 text-white border-0 backdrop-blur-sm text-xs">
-                  {animatedKmPercentage}% completado
-                </Badge>
-              </span>
-            </CardTitle>
-            <CardDescription className="text-green-100">Seguimiento de kilómetros recorridos</CardDescription>
+        <CardContent className="flex-1 space-y-4 relative z-10 pb-4">
+          {/* Month/Year Selectors - Compact */}
+          <div className="flex gap-2">
+            <Select value={selectedYear?.toString() || ""} onValueChange={(value) => setSelectedYear(Number(value))}>
+              <SelectTrigger className="flex-1 h-9 border-green-200 bg-white/80 backdrop-blur-sm shadow-sm text-sm">
+                <SelectValue placeholder="Año" />
+              </SelectTrigger>
+              <SelectContent>
+                {data?.availableYears?.map((year: number) => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedMonth?.toString() || ""} onValueChange={(value) => setSelectedMonth(Number(value))}>
+              <SelectTrigger className="flex-1 h-9 border-green-200 bg-white/80 backdrop-blur-sm shadow-sm text-sm">
+                <SelectValue placeholder="Mes" />
+              </SelectTrigger>
+              <SelectContent>
+                {data?.availableMonths?.map((month: number) => (
+                  <SelectItem key={month} value={month.toString()}>
+                    {getMonthName(month)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Refresh button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleRefreshData}
-            disabled={isFetching}
-            className={`h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 text-white ${isFetching ? "animate-spin" : ""}`}
-          >
-            <RefreshCw className="h-4 w-4" />
-            <span className="sr-only">Actualizar datos</span>
-          </Button>
-        </div>
-      </CardHeader>
-
-      <CardContent className="pb-2 text-white relative z-10">
-        {/* Year/Month Selector */}
-        <div className="mb-4">
-          <motion.div
-            className="bg-white/10 backdrop-blur-sm rounded-xl overflow-hidden border border-white/20"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <div className="p-3">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium flex items-center">
-                  <Calendar className="h-3.5 w-3.5 mr-1.5 opacity-80" />
-                  Filtrar por período
-                </h3>
-                {selectedYear && selectedMonth && (
-                  <Badge className="bg-emerald-500/30 text-white hover:bg-emerald-500/40 border-0">
-                    {getMonthName(selectedMonth)} {selectedYear}
-                  </Badge>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs text-white/70 flex items-center">
-                    <ArrowLeft className="h-3 w-3 mr-1 opacity-70" />
-                    Año
-                  </label>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full bg-white/20 text-white border-white/20 rounded-lg text-sm py-1.5 px-3 h-9 hover:bg-white/30 transition-colors focus:outline-none focus:ring-2 focus:ring-white/30 justify-between"
-                      >
-                        {selectedYear ? selectedYear : "Seleccionar año"}
-                        <Calendar className="h-4 w-4 ml-2 opacity-70" />
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-md bg-gradient-to-br from-green-500/95 to-emerald-600/95 text-white border-white/20 backdrop-blur-md">
-                      <DialogHeader>
-                        <DialogTitle className="text-white flex items-center">
-                          <Calendar className="h-5 w-5 mr-2" />
-                          Seleccionar año
-                        </DialogTitle>
-                        <DialogDescription className="text-green-100">
-                          Elige el año para filtrar los datos de kilómetros
-                        </DialogDescription>
-                      </DialogHeader>
-                      <ScrollArea className="mt-4 max-h-[40vh]">
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          {data?.availableYears?.map((year) => (
-                            <Button
-                              key={year}
-                              variant="outline"
-                              className={`border-white/20 hover:bg-white/20 hover:text-white ${
-                                selectedYear === year
-                                  ? "bg-white/30 border-white/40 ring-2 ring-white/30"
-                                  : "bg-white/10"
-                              }`}
-                              onClick={() => setSelectedYear(year)}
-                            >
-                              {year}
-                              {selectedYear === year && <CheckCircle2 className="h-4 w-4 ml-2" />}
-                            </Button>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                      <DialogFooter className="flex flex-row justify-between items-center mt-4 pt-3 border-t border-white/20">
-                        <Button
-                          variant="ghost"
-                          className="text-white/80 hover:text-white hover:bg-white/20"
-                          onClick={() => {
-                            setSelectedYear(null)
-                            setSelectedMonth(null)
-                          }}
-                        >
-                          Limpiar selección
-                        </Button>
-                        <DialogClose asChild>
-                          <Button className="bg-white/20 hover:bg-white/30 text-white border-white/20">Aceptar</Button>
-                        </DialogClose>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs text-white/70 flex items-center">
-                    <ArrowRight className="h-3 w-3 mr-1 opacity-70" />
-                    Mes
-                  </label>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full bg-white/20 text-white border-white/20 rounded-lg text-sm py-1.5 px-3 h-9 hover:bg-white/30 transition-colors focus:outline-none focus:ring-2 focus:ring-white/30 justify-between"
-                        disabled={!selectedYear}
-                      >
-                        {selectedMonth ? getMonthName(selectedMonth) : "Seleccionar mes"}
-                        <Calendar className="h-4 w-4 ml-2 opacity-70" />
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-md bg-gradient-to-br from-green-500/95 to-emerald-600/95 text-white border-white/20 backdrop-blur-md">
-                      <DialogHeader>
-                        <DialogTitle className="text-white flex items-center">
-                          <Calendar className="h-5 w-5 mr-2" />
-                          Seleccionar mes
-                        </DialogTitle>
-                        <DialogDescription className="text-green-100">
-                          Elige el mes para filtrar los datos de kilómetros
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="mt-4">
-                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((month) => {
-                            const isAvailable = data?.availableMonths?.includes(month) || false
-                            return (
-                              <Button
-                                key={month}
-                                variant="outline"
-                                className={`border-white/20 hover:bg-white/20 hover:text-white ${
-                                  selectedMonth === month
-                                    ? "bg-white/30 border-white/40 ring-2 ring-white/30"
-                                    : "bg-white/10"
-                                } ${!isAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
-                                disabled={!isAvailable}
-                                onClick={() => {
-                                  if (isAvailable) {
-                                    setSelectedMonth(month)
-                                  }
-                                }}
-                              >
-                                <div className="flex flex-col items-center">
-                                  <span className="text-xs">{getMonthName(month).substring(0, 3)}</span>
-                                  <span className="text-lg font-semibold">{month}</span>
-                                </div>
-                                {selectedMonth === month && <CheckCircle2 className="h-4 w-4 absolute top-1 right-1" />}
-                              </Button>
-                            )
-                          })}
-                        </div>
-                      </div>
-                      <DialogFooter className="flex flex-row justify-between items-center mt-4 pt-3 border-t border-white/20">
-                        <Button
-                          variant="ghost"
-                          className="text-white/80 hover:text-white hover:bg-white/20"
-                          onClick={() => {
-                            setSelectedMonth(null)
-                          }}
-                        >
-                          Limpiar selección
-                        </Button>
-                        <DialogClose asChild>
-                          <Button className="bg-white/20 hover:bg-white/30 text-white border-white/20">Aceptar</Button>
-                        </DialogClose>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </div>
+          {/* Main Metric - Compact */}
+          <div className="text-center py-3">
+            <div className="text-3xl font-bold bg-gradient-to-r from-green-700 to-green-600 bg-clip-text text-transparent">
+              {formatNumber(animatedKm)}
             </div>
+            <div className="text-sm text-green-600/70 font-medium">
+              de {formatNumber(Number(displayData.valor_programacion))} km
+            </div>
+          </div>
 
-            {(selectedYear || selectedMonth) && (
+          {/* Progress Bar - Compact */}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-green-700">Progreso</span>
+              <Badge variant="secondary" className="bg-green-100 text-green-700 border-green-200 text-xs">
+                {animatedKmPercentage}%
+              </Badge>
+            </div>
+            <div className="w-full bg-green-100 rounded-full h-2.5 overflow-hidden shadow-inner">
               <motion.div
-                className="bg-white/5 border-t border-white/10 px-3 py-2 flex justify-between items-center"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                <span className="text-xs text-white/60">Filtros aplicados</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs text-white/80 hover:text-white hover:bg-white/20"
-                  onClick={() => {
-                    setSelectedYear(null)
-                    setSelectedMonth(null)
-                  }}
-                >
-                  Limpiar filtros
-                </Button>
-              </motion.div>
-            )}
-          </motion.div>
-        </div>
-
-        <motion.div
-          className="flex items-center justify-between mb-2"
-          animate={{ opacity: [0, 1] }}
-          transition={{ duration: 0.5 }}
-        >
-          <span className="text-lg font-semibold flex items-center">
-            <Calendar className="h-4 w-4 mr-1" />
-            {displayData.monthName} {displayData.year}
-          </span>
-          <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm">
-            <motion.span
-              animate={{ opacity: [1, 0.7, 1] }}
-              transition={{ repeat: Number.POSITIVE_INFINITY, duration: 1.5, ease: "easeInOut" }}
-            >
-              {animatedKmPercentage}% completado
-            </motion.span>
-          </Badge>
-        </motion.div>
-
-        <div className="flex items-baseline mb-4">
-          <motion.p
-            className="text-5xl font-bold"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.3, duration: 0.5 }}
-          >
-            {formatNumber(Number(displayData.valor_ejecucion))}
-          </motion.p>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="flex flex-col ml-3"
-          >
-            <span className="text-white/90 text-sm">/ {formatNumber(Number(displayData.valor_programacion))} km</span>
-            <span className="text-white/70 text-xs">este mes</span>
-          </motion.div>
-        </div>
-
-        <div className="w-full bg-white/20 h-3 rounded-full overflow-hidden mb-2 backdrop-blur-sm">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${animatedKmPercentage}%` }}
-            transition={{ delay: 0.5, duration: 1, ease: "easeOut" }}
-            className="h-full rounded-full relative"
-            style={{
-              background: `linear-gradient(90deg, rgba(255,255,255,0.9) 0%, ${
-                animatedKmPercentage >= 90
-                  ? "rgba(52,211,153,0.9)"
-                  : animatedKmPercentage >= 70
-                    ? "rgba(251,191,36,0.9)"
-                    : "rgba(239,68,68,0.9)"
-              } 100%)`,
-              boxShadow: "0 0 10px rgba(255,255,255,0.5)",
-            }}
-          >
-            {/* Enhanced glow effect */}
-            <motion.div
-              className="absolute top-0 right-0 h-full w-6 bg-white/80 blur-sm"
-              animate={{
-                x: [0, 8, 0],
-                opacity: [0.5, 0.8, 0.5],
-              }}
-              transition={{
-                repeat: Number.POSITIVE_INFINITY,
-                duration: 2,
-                ease: "easeInOut",
-              }}
-            />
-
-            {/* Animated dots along the progress bar */}
-            {animatedKmPercentage > 10 &&
-              [...Array(Math.floor(animatedKmPercentage / 20))].map((_, i) => (
-                <motion.div
-                  key={i}
-                  className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full"
-                  style={{
-                    left: `${(i + 1) * 20}%`,
-                  }}
-                  animate={{
-                    scale: [1, 1.5, 1],
-                    opacity: [0.7, 1, 0.7],
-                  }}
-                  transition={{
-                    repeat: Number.POSITIVE_INFINITY,
-                    duration: 2,
-                    delay: i * 0.3,
-                  }}
-                />
-              ))}
-          </motion.div>
-        </div>
-
-        <div className="flex justify-between text-xs text-white/70 mb-4">
-          <span>0 km</span>
-          <span>{formatNumber(Number(displayData.valor_programacion))} km</span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <motion.div
-            className="bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/10"
-            whileHover={{
-              backgroundColor: "rgba(255, 255, 255, 0.15)",
-              borderColor: "rgba(255, 255, 255, 0.2)",
-              y: -2,
-              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
-            }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="flex items-center text-xs text-green-100 mb-1">
-              <Target className="h-3 w-3 mr-1" />
-              <span>Meta mensual</span>
+                className="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full shadow-sm"
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min(100, animatedKmPercentage)}%` }}
+                transition={{ duration: 1.5, ease: "easeOut" }}
+              />
             </div>
-            <div className="font-medium text-lg">{formatNumber(Number(displayData.valor_programacion))} km</div>
-          </motion.div>
-          <motion.div
-            className="bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/10"
-            whileHover={{
-              backgroundColor: "rgba(255, 255, 255, 0.15)",
-              borderColor: "rgba(255, 255, 255, 0.2)",
-              y: -2,
-              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
-            }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="flex items-center text-xs text-green-100 mb-1">
-              <Zap className="h-3 w-3 mr-1" />
-              <span>Promedio diario</span>
-            </div>
-            <div className="font-medium text-lg">{dailyAverage.toLocaleString()} km</div>
-          </motion.div>
-        </div>
-      </CardContent>
-
-      <CardFooter className="bg-emerald-700/30 backdrop-blur-sm pt-3 pb-3 border-t border-white/10 relative z-10">
-        <motion.div
-          className="flex items-center w-full justify-center text-white/90 text-sm"
-          whileHover={{ scale: 1.02 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Sparkles className="h-4 w-4 mr-2" />
-          {(displayData.percentage || 0) >= 90
-            ? "¡Excelente progreso!"
-            : (displayData.percentage || 0) >= 70
-              ? "Buen progreso"
-              : "Continúa esforzándote"}
-        </motion.div>
-      </CardFooter>
+          </div>
+        </CardContent>
+      </Card>
     </motion.div>
   )
 }
 
-// Enhanced BonusCard component with React Query
-function BonusCard({
-  userCode,
-}: {
-  userCode: string
-}) {
-  const [showDeductions, setShowDeductions] = useState(false)
-  const [isHovered, setIsHovered] = useState(false)
+const BonusCard: React.FC<{ userCode: string }> = ({ userCode }) => {
+  const [data, setData] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedYear, setSelectedYear] = useState<number | null>(null)
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null)
-  const queryClient = useQueryClient()
 
-  // Default bonus data
-  const defaultBonusData: BonusData = {
-    baseBonus: null,
-    deductionPercentage: null,
-    deductionAmount: null,
-    finalBonus: null,
-    expiresInDays: null,
-    bonusesByYear: null,
-    deductions: null,
-    lastMonthData: null,
-    availableYears: [],
-    availableMonths: [],
-  }
-
-  // Main query for bonus data
-  const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ["bonuses", userCode, selectedYear, selectedMonth],
-    queryFn: () =>
-      api.fetchBonuses({
+  const fetchData = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      const result = await api.fetchBonuses({
         userCode,
         year: selectedYear || undefined,
         month: selectedMonth || undefined,
-      }),
-    onSuccess: (data) => {
-      // Set default selections if not already set
-      if (!selectedYear && data.bonusData.availableYears && data.bonusData.availableYears.length) {
-        setSelectedYear(data.bonusData.availableYears[0])
-      }
+      })
+      setData(result)
 
-      if (!selectedMonth && data.bonusData.availableMonths && data.bonusData.availableMonths.length) {
-        setSelectedMonth(data.bonusData.availableMonths[data.bonusData.availableMonths.length - 1])
+      if (!selectedYear && result.bonusData.availableYears?.length) {
+        setSelectedYear(result.bonusData.availableYears[0])
       }
-    },
-  })
-
-  // Handle refresh data
-  const handleRefreshData = () => {
-    if (isFetching) return
-    refetch()
+      if (!selectedMonth && result.bonusData.availableMonths?.length) {
+        setSelectedMonth(result.bonusData.availableMonths[result.bonusData.availableMonths.length - 1])
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error desconocido")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  // Determine display data based on filters
+  useEffect(() => {
+    if (userCode) {
+      fetchData()
+    }
+  }, [userCode, selectedYear, selectedMonth])
+
   const displayData = useMemo(() => {
     if (!data) return null
-
-    // If there are monthly data and they are filtered, use those
-    if (data.monthlyBonusData && data.monthlyBonusData.length > 0) {
-      // Look for data that match the filters
+    if (data.monthlyBonusData?.length > 0) {
       if (selectedYear && selectedMonth) {
         const filtered = data.monthlyBonusData.find(
           (item) => item.year === selectedYear && item.month === selectedMonth,
         )
         if (filtered) return filtered
       }
-
-      // If no exact match, use the first element
       return data.monthlyBonusData[0]
     }
-
-    // If there is lastMonthData, use it
-    if (data.bonusData.lastMonthData) {
-      return {
-        year: data.bonusData.lastMonthData.year,
-        month: data.bonusData.lastMonthData.month,
-        monthName: data.bonusData.lastMonthData.monthName?.toLowerCase(),
-        bonusValue: data.bonusData.lastMonthData.bonusValue,
-        deductionAmount: data.bonusData.lastMonthData.deductionAmount,
-        finalValue: data.bonusData.lastMonthData.finalValue,
-      }
-    }
-
-    // If there is base data but no specific month data
-    if (data.bonusData.baseBonus !== null && data.bonusData.finalBonus !== null) {
-      return {
-        year: selectedYear || new Date().getFullYear(),
-        month: selectedMonth || new Date().getMonth() + 1,
-        monthName: selectedMonth ? getMonthName(selectedMonth).toLowerCase() : "",
-        bonusValue: data.bonusData.baseBonus,
-        deductionAmount: data.bonusData.deductionAmount || 0,
-        finalValue: data.bonusData.finalBonus,
-      }
-    }
-
-    return null
+    return data.bonusData.lastMonthData
   }, [data, selectedYear, selectedMonth])
 
-  // Calculate values
-  const bonusValue = displayData?.finalValue || 0
-  const animatedBonus = useAnimatedCounter(bonusValue)
-  const deductionPercentage =
-    displayData?.bonusValue && displayData.bonusValue > 0 && displayData.deductionAmount != null
-      ? Math.min(100, Math.round((displayData.deductionAmount / displayData.bonusValue) * 100))
-      : 0
+  const percentage = useMemo(() => {
+    if (!displayData) return 0
+    const base = displayData.bonusValue || 0
+    const final = displayData.finalValue || 0
+    if (base > 0) {
+      return Math.max(0, Math.round((final / base) * 100))
+    }
+    return 100 // If no base, assume 100% unless there are deductions
+  }, [displayData])
 
-  // Format currency
-  const formatCurrency = (amount: number | null) => {
-    if (amount === null || amount === undefined || isNaN(amount)) return "$0"
+  const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("es-CO", {
-      style: "currency",
+      style: "decimal",
       currency: "COP",
+      minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount)
   }
 
-  // Clear filters
-  const handleClearFilters = () => {
-    setSelectedYear(null)
-    setSelectedMonth(null)
-  }
+  return (
+    <motion.div
+      variants={cardVariants}
+      initial="initial"
+      animate="animate"
+      whileHover="hover"
+      className="w-full h-full"
+    >
+      <Card className="relative bg-gradient-to-br from-white via-green-50/30 to-white border-2 border-green-100 shadow-xl overflow-hidden backdrop-blur-sm h-full flex flex-col">
+        <DecorativePattern variant="dots" color="#3b82f6" />
+
+        <div className="absolute top-0 right-0 w-28 h-28 bg-gradient-to-br from-green-200/20 to-green-300/10 rounded-full blur-3xl -translate-y-14 translate-x-14" />
+        <div className="absolute bottom-0 left-0 w-20 h-20 bg-gradient-to-tr from-green-100/30 to-green-200/20 rounded-full blur-2xl translate-y-10 -translate-x-10" />
+
+        <CardHeader className="pb-3 relative z-10 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg">
+                <DollarSign className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-lg font-bold bg-gradient-to-r from-green-700 to-green-600 bg-clip-text text-transparent">
+                  Bonificaciones
+                </CardTitle>
+                <CardDescription className="text-green-600/70 font-medium text-sm">
+                  {displayData?.monthName} {displayData?.year}
+                </CardDescription>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchData}
+              disabled={isLoading}
+              className="h-9 px-3 border-green-200 hover:bg-green-50 bg-white/80 backdrop-blur-sm shadow-sm"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""} text-green-600`} />
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="flex-1 space-y-4 relative z-10 pb-4">
+          {/* Month/Year Selectors - Compact */}
+          <div className="flex gap-2">
+            <Select value={selectedYear?.toString() || ""} onValueChange={(value) => setSelectedYear(Number(value))}>
+              <SelectTrigger className="flex-1 h-9 border-green-200 bg-white/80 backdrop-blur-sm shadow-sm text-sm">
+                <SelectValue placeholder="Año" />
+              </SelectTrigger>
+              <SelectContent>
+                {data?.bonusData.availableYears?.map((year: number) => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedMonth?.toString() || ""} onValueChange={(value) => setSelectedMonth(Number(value))}>
+              <SelectTrigger className="flex-1 h-9 border-green-200 bg-white/80 backdrop-blur-sm shadow-sm text-sm">
+                <SelectValue placeholder="Mes" />
+              </SelectTrigger>
+              <SelectContent>
+                {data?.bonusData.availableMonths?.map((month: number) => (
+                  <SelectItem key={month} value={month.toString()}>
+                    {getMonthName(month)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Main Metric - Compact */}
+          <div className="text-center py-3">
+            <div className="text-3xl font-bold bg-gradient-to-r from-green-700 to-green-600 bg-clip-text text-transparent">
+              ${displayData ? formatCurrency(displayData.finalValue || 0) : "0"}
+            </div>
+            <div className="text-sm text-green-600/70 font-medium">
+              de ${displayData ? formatCurrency(displayData.bonusValue || 0) : "0"}
+            </div>
+          </div>
+
+          {/* Progress Bar - Compact */}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-green-700">Eficiencia</span>
+              <Badge variant="secondary" className="bg-green-100 text-green-700 border-green-200 text-xs">
+                {percentage}%
+              </Badge>
+            </div>
+            <div className="w-full bg-green-100 rounded-full h-2.5 overflow-hidden shadow-inner">
+              <motion.div
+                className="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full shadow-sm"
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min(100, percentage)}%` }}
+                transition={{ duration: 1.5, ease: "easeOut" }}
+              />
+            </div>
+          </div>
+
+          {/* Stats - Compact */}
+          {displayData?.deductionAmount && displayData.deductionAmount > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-500" />
+                <div>
+                  <div className="text-xs text-red-600 font-medium">Deducción</div>
+                  <div className="text-sm font-bold text-red-700">-${formatCurrency(displayData.deductionAmount)}</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+}
+
+const AnnualProgressCard: React.FC<{ userCode: string }> = ({ userCode }) => {
+  const [data, setData] = useState<any>(null)
+  const [bonusData, setBonusData] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedYear, setSelectedYear] = useState<number | null>(null)
+
+  const fetchData = useCallback(
+    async (year: number) => {
+      try {
+        setIsLoading(true)
+        setError(null)
+
+        const [kmResult, bonusResult] = await Promise.all([
+          api.fetchKilometers({
+            userCode,
+            year: year,
+          }),
+          api.fetchBonuses({
+            userCode,
+            year: year,
+          }),
+        ])
+
+        setData(kmResult)
+        setBonusData(bonusResult)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error desconocido")
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [userCode],
+  )
+
+  useEffect(() => {
+    if (userCode) {
+      if (selectedYear) {
+        fetchData(selectedYear)
+      } else {
+        // First, get available years to then fetch data for the latest one.
+        setIsLoading(true)
+        api
+          .fetchKilometers({ userCode })
+          .then(result => {
+            if (result.availableYears?.length) {
+              // Set the fetched years in the state of the parent component if needed,
+              // but for this card, just select the most recent year.
+              setSelectedYear(result.availableYears[0])
+            } else {
+              setIsLoading(false)
+            }
+          })
+          .catch(err => {
+            setError(err instanceof Error ? err.message : "Error desconocido")
+            setIsLoading(false)
+          })
+      }
+    }
+  }, [userCode, selectedYear, fetchData])
+
+  // Calculate annual totals and percentages with monthly breakdown
+  const annualData = useMemo(() => {
+    if (!data || !bonusData || !selectedYear) return null
+
+    // 1. Calculate Kilometer Totals
+    const yearKmData = data.monthlyData?.filter((item: any) => item.year === selectedYear) || []
+    const totalKmExecuted = yearKmData.reduce((sum: number, item: any) => sum + Number(item.valor_ejecucion || 0), 0)
+    const totalKmProgrammed = yearKmData.reduce(
+      (sum: number, item: any) => sum + Number(item.valor_programacion || 0),
+      0,
+    )
+    const kmPercentage =
+      totalKmProgrammed > 0 ? Math.max(0, Math.round((totalKmExecuted / totalKmProgrammed) * 100)) : 0
+
+    // 2. Calculate Bonus Totals
+    let totalBonusBase = 0
+    let totalBonusFinal = 0
+    let totalDeductions = 0
+
+    const monthsWithData = yearKmData.length
+    if (monthsWithData > 0) {
+      const baseForYear = getBaseBonusForYear(selectedYear)
+      totalBonusBase = baseForYear * monthsWithData
+
+      // The summary from the year-long API call contains the total deductions for the year so far
+      if (bonusData.summary && bonusData.summary.totalDeduction !== undefined) {
+        totalDeductions = bonusData.summary.totalDeduction
+      }
+
+      totalBonusFinal = totalBonusBase - totalDeductions
+    }
+
+    // 3. Calculate Bonus Percentage (0-100%)
+    let bonusPercentage = 100
+    if (totalBonusBase > 0) {
+      bonusPercentage = Math.min(100, Math.max(0, Math.round((totalBonusFinal / totalBonusBase) * 100)))
+    }
+
+    // 4. Calculate Combined Percentage (0-100%)
+    const combinedPercentage = Math.max(0, Math.round((kmPercentage + bonusPercentage) / 2))
+
+    return {
+      year: selectedYear,
+      kilometers: {
+        executed: totalKmExecuted,
+        programmed: totalKmProgrammed,
+        percentage: kmPercentage,
+      },
+      bonus: {
+        base: Math.max(0, totalBonusBase),
+        final: Math.max(0, totalBonusFinal),
+        percentage: bonusPercentage,
+        deductions: Math.max(0, totalDeductions),
+      },
+      combinedPercentage,
+      monthsWithData: yearKmData.length,
+      monthlyBreakdown: [], // Removed as per previous request
+    }
+  }, [data, bonusData, selectedYear])
+
+  const animatedCombinedPercentage = useAnimatedCounter(annualData?.combinedPercentage || 0)
 
   if (isLoading) {
     return (
       <Card className="rounded-xl shadow-md overflow-hidden">
         <CardHeader className="pb-2">
-          <Skeleton className="h-6 w-32" />
-          <Skeleton className="h-4 w-48 mt-1" />
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-4 w-56 mt-1" />
         </CardHeader>
         <CardContent className="pb-4">
           <Skeleton className="h-8 w-full mb-4" />
-          <Skeleton className="h-10 w-40 mb-4" />
-          <Skeleton className="h-2 w-full mb-2" />
-          <Skeleton className="h-4 w-full mb-4" />
-          <Skeleton className="h-20 w-full rounded-lg mb-4" />
+          <Skeleton className="h-32 w-full mb-4" />
+          <Skeleton className="h-20 w-full rounded-lg" />
         </CardContent>
-        <CardFooter className="bg-gray-50 pt-3 pb-3 border-t">
-          <Skeleton className="h-9 w-full rounded-md" />
-        </CardFooter>
       </Card>
     )
   }
@@ -1190,13 +927,13 @@ function BonusCard({
         <CardHeader className="pb-2">
           <CardTitle className="text-lg font-semibold flex items-center">
             <AlertTriangle className="h-5 w-5 mr-2 text-red-500" />
-            Error al cargar los datos
+            Error al cargar datos anuales
           </CardTitle>
           <CardDescription>Por favor, inténtalo de nuevo más tarde.</CardDescription>
         </CardHeader>
         <CardContent className="pb-4">
-          <p className="text-gray-600">{error instanceof Error ? error.message : "Error desconocido"}</p>
-          <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
+          <p className="text-gray-600">{error}</p>
+          <Button variant="outline" size="sm" className="mt-4 bg-transparent" onClick={() => fetchData(selectedYear || 0)}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Reintentar
           </Button>
@@ -1205,867 +942,458 @@ function BonusCard({
     )
   }
 
-  if (!displayData) {
-    return (
-      <Card className="rounded-xl shadow-md overflow-hidden">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg font-semibold flex items-center">
-            <Gift className="h-5 w-5 mr-2" />
-            Bonos Mensuales
-          </CardTitle>
-          <CardDescription>No hay datos disponibles</CardDescription>
-        </CardHeader>
-        <CardContent className="pb-4">
-          <p className="text-gray-600">No se pudo cargar la información de bonos en este momento.</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <TooltipProvider>
-      <motion.div
-        variants={cardVariants}
-        initial="initial"
-        animate="animate"
-        whileHover="hover"
-        onHoverStart={() => setIsHovered(true)}
-        onHoverEnd={() => setIsHovered(false)}
-        className="relative bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl shadow-lg overflow-hidden"
-      >
-        <DecorativePattern variant="waves" />
-
-        {/* Enhanced decorative elements with animations */}
-        <motion.div
-          className="absolute top-0 left-0 w-32 h-32 -mt-10 -ml-10 bg-white/10 rounded-full blur-2xl"
-          animate={{
-            scale: [1, 1.05, 1],
-            opacity: [0.5, 0.7, 0.5],
-          }}
-          transition={{
-            repeat: Number.POSITIVE_INFINITY,
-            duration: 5,
-            ease: "easeInOut",
-          }}
-        />
-        <motion.div
-          className="absolute bottom-0 right-0 w-24 h-24 -mb-8 -mr-8 bg-white/10 rounded-full blur-xl"
-          animate={{
-            scale: [1, 1.1, 1],
-            opacity: [0.3, 0.5, 0.3],
-          }}
-          transition={{
-            repeat: Number.POSITIVE_INFINITY,
-            duration: 4,
-            ease: "easeInOut",
-            delay: 1,
-          }}
-        />
-
-        {/* Enhanced animated particles */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {[...Array(8)].map((_, i) => (
-            <motion.div
-              key={i}
-              className="absolute w-1 h-1 bg-white/40 rounded-full"
-              style={{
-                top: `${Math.random() * 100}%`,
-                left: `${Math.random() * 100}%`,
-              }}
-              animate={{
-                y: [0, -20, 0],
-                opacity: [0, 1, 0],
-                scale: [0.8, 1.2, 0.8],
-              }}
-              transition={{
-                duration: 2 + Math.random() * 2,
-                repeat: Number.POSITIVE_INFINITY,
-                delay: Math.random() * 5,
-              }}
-            />
-          ))}
-        </div>
-
-        <CardHeader className="pb-2 text-white relative z-10">
-          <div className="flex justify-between items-start">
-            <div>
-              <CardTitle className="text-xl flex items-center">
-                <Gift className="h-5 w-5 mr-2" />
-                Bonos Mensuales
-              </CardTitle>
-              <CardDescription className="text-emerald-100">Valor después de descuentos</CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              {data?.bonusData.expiresInDays !== null && data?.bonusData.expiresInDays !== undefined && (
-                <Badge className="bg-white/20 text-white border-0 flex items-center backdrop-blur-sm">
-                  <Clock className="h-3 w-3 mr-1" />
-                  <motion.span
-                    animate={{ opacity: [1, 0.7, 1] }}
-                    transition={{ repeat: Number.POSITIVE_INFINITY, duration: 1.5, ease: "easeInOut" }}
-                  >
-                    {data.bonusData.expiresInDays} días
-                  </motion.span>
-                </Badge>
-              )}
-
-              {/* Refresh button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleRefreshData}
-                disabled={isFetching}
-                className={`h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 text-white ${isFetching ? "animate-spin" : ""}`}
-              >
-                <RefreshCw className="h-4 w-4" />
-                <span className="sr-only">Actualizar datos</span>
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="pb-4 text-white relative z-10">
-          {/* Year/Month Selector */}
-          {data?.bonusData.availableYears && data.bonusData.availableYears.length > 0 && (
-            <div className="mb-4">
-              <motion.div
-                className="bg-white/10 backdrop-blur-sm rounded-xl overflow-hidden border border-white/20"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <div className="p-3">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-medium flex items-center">
-                      <Calendar className="h-3.5 w-3.5 mr-1.5 opacity-80" />
-                      Filtrar bonificaciones
-                    </h3>
-                    {selectedYear && selectedMonth && (
-                      <Badge className="bg-teal-500/30 text-white hover:bg-teal-500/40 border-0">
-                        {getMonthName(selectedMonth)} {selectedYear}
-                      </Badge>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-white/70 flex items-center">
-                        <ArrowLeft className="h-3 w-3 mr-1 opacity-70" />
-                        Año
-                      </label>
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full bg-white/20 text-white border-white/20 rounded-lg text-sm py-1.5 px-3 h-9 hover:bg-white/30 transition-colors focus:outline-none focus:ring-2 focus:ring-white/30 justify-between"
-                          >
-                            {selectedYear ? selectedYear : "Seleccionar año"}
-                            <Calendar className="h-4 w-4 ml-2 opacity-70" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-md bg-gradient-to-br from-emerald-500/95 to-teal-600/95 text-white border-white/20 backdrop-blur-md">
-                          <DialogHeader>
-                            <DialogTitle className="text-white flex items-center">
-                              <Calendar className="h-5 w-5 mr-2" />
-                              Seleccionar año
-                            </DialogTitle>
-                            <DialogDescription className="text-emerald-100">
-                              Elige el año para filtrar los datos de bonificaciones
-                            </DialogDescription>
-                          </DialogHeader>
-                          <ScrollArea className="mt-4 max-h-[40vh]">
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                              {data.bonusData.availableYears &&
-                                data.bonusData.availableYears.map((year) => (
-                                  <Button
-                                    key={year}
-                                    variant="outline"
-                                    className={`border-white/20 hover:bg-white/20 hover:text-white ${
-                                      selectedYear === year
-                                        ? "bg-white/30 border-white/40 ring-2 ring-white/30"
-                                        : "bg-white/10"
-                                    }`}
-                                    onClick={() => {
-                                      setSelectedYear(year)
-                                      setSelectedMonth(null)
-                                    }}
-                                  >
-                                    {year}
-                                    {selectedYear === year && <CheckCircle2 className="h-4 w-4 ml-2" />}
-                                  </Button>
-                                ))}
-                            </div>
-                          </ScrollArea>
-                          <DialogFooter className="flex flex-row justify-between items-center mt-4 pt-3 border-t border-white/20">
-                            <Button
-                              variant="ghost"
-                              className="text-white/80 hover:text-white hover:bg-white/20"
-                              onClick={() => {
-                                setSelectedYear(null)
-                              }}
-                            >
-                              Limpiar selección
-                            </Button>
-                            <DialogClose asChild>
-                              <Button className="bg-white/20 hover:bg-white/30 text-white border-white/20">
-                                Aceptar
-                              </Button>
-                            </DialogClose>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-white/70 flex items-center">
-                        <ArrowRight className="h-3 w-3 mr-1 opacity-70" />
-                        Mes
-                      </label>
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full bg-white/20 text-white border-white/20 rounded-lg text-sm py-1.5 px-3 h-9 hover:bg-white/30 transition-colors focus:outline-none focus:ring-2 focus:ring-white/30 justify-between"
-                            disabled={!selectedYear}
-                          >
-                            {selectedMonth ? getMonthName(selectedMonth) : "Seleccionar mes"}
-                            <Calendar className="h-4 w-4 ml-2 opacity-70" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-md bg-gradient-to-br from-emerald-500/95 to-teal-600/95 text-white border-white/20 backdrop-blur-md">
-                          <DialogHeader>
-                            <DialogTitle className="text-white flex items-center">
-                              <Calendar className="h-5 w-5 mr-2" />
-                              Seleccionar mes
-                            </DialogTitle>
-                            <DialogDescription className="text-emerald-100">
-                              Elige el mes para filtrar los datos de bonificaciones
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="mt-4">
-                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((month) => {
-                                const isAvailable = data.bonusData.availableMonths?.includes(month) || false
-                                return (
-                                  <Button
-                                    key={month}
-                                    variant="outline"
-                                    className={`border-white/20 hover:bg-white/20 hover:text-white ${
-                                      selectedMonth === month
-                                        ? "bg-white/30 border-white/40 ring-2 ring-white/30"
-                                        : "bg-white/10"
-                                    } ${!isAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
-                                    disabled={!isAvailable}
-                                    onClick={() => {
-                                      if (isAvailable) {
-                                        setSelectedMonth(month)
-                                      }
-                                    }}
-                                  >
-                                    <div className="flex flex-col items-center">
-                                      <span className="text-xs">{getMonthName(month).substring(0, 3)}</span>
-                                      <span className="text-lg font-semibold">{month}</span>
-                                    </div>
-                                    {selectedMonth === month && (
-                                      <CheckCircle2 className="h-4 w-4 absolute top-1 right-1" />
-                                    )}
-                                  </Button>
-                                )
-                              })}
-                            </div>
-                          </div>
-                          <DialogFooter className="flex flex-row justify-between items-center mt-4 pt-3 border-t border-white/20">
-                            <Button
-                              variant="ghost"
-                              className="text-white/80 hover:text-white hover:bg-white/20"
-                              onClick={() => {
-                                setSelectedMonth(null)
-                              }}
-                            >
-                              Limpiar selección
-                            </Button>
-                            <DialogClose asChild>
-                              <Button className="bg-white/20 hover:bg-white/30 text-white border-white/20">
-                                Aceptar
-                              </Button>
-                            </DialogClose>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                  </div>
-                </div>
-
-                {(selectedYear || selectedMonth) && (
-                  <motion.div
-                    className="bg-white/5 border-t border-white/10 px-3 py-2 flex justify-between items-center"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.2 }}
-                  >
-                    <span className="text-xs text-white/60">Filtros aplicados</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs text-white/80 hover:text-white hover:bg-white/20"
-                      onClick={handleClearFilters}
-                    >
-                      Limpiar filtros
-                    </Button>
-                  </motion.div>
-                )}
-              </motion.div>
-            </div>
-          )}
-
-          <div className="flex items-baseline mb-4">
-            <motion.p
-              className="text-4xl font-bold"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.3, duration: 0.5 }}
-            >
-              {formatCurrency(animatedBonus)}
-            </motion.p>
-
-            {/* Enhanced sparkle animation */}
-            <motion.div
-              className="ml-2"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1, duration: 0.5 }}
-            >
-              <motion.div
-                animate={{
-                  rotate: [0, 15, -15, 0],
-                  scale: [1, 1.2, 0.9, 1],
-                }}
-                transition={{
-                  repeat: Number.POSITIVE_INFINITY,
-                  duration: 3,
-                  ease: "easeInOut",
-                }}
-              >
-                <Sparkles className="h-5 w-5 text-yellow-300" />
-              </motion.div>
-            </motion.div>
-          </div>
-
-          <div className="w-full bg-white/20 h-3 rounded-full overflow-hidden mb-2 backdrop-blur-sm">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{
-                width: `${Math.max(0, 100 - deductionPercentage)}%`,
-              }}
-              transition={{ delay: 0.5, duration: 1, ease: "easeOut" }}
-              className="h-full rounded-full relative"
-              style={{
-                background: `linear-gradient(90deg, rgba(255,255,255,0.9) 0%, ${
-                  deductionPercentage <= 10
-                    ? "rgba(52,211,153,0.9)"
-                    : deductionPercentage <= 30
-                      ? "rgba(251,191,36,0.9)"
-                      : "rgba(239,68,68,0.9)"
-                } 100%)`,
-              }}
-            >
-              {/* Enhanced glow effect */}
-              <motion.div
-                className="absolute top-0 right-0 h-full w-6 bg-white/80 blur-sm"
-                animate={{
-                  x: [0, 8, 0],
-                  opacity: [0.5, 0.8, 0.5],
-                }}
-                transition={{
-                  repeat: Number.POSITIVE_INFINITY,
-                  duration: 2,
-                  ease: "easeInOut",
-                }}
-              />
-
-              {/* Animated dots along the progress bar */}
-              {deductionPercentage < 90 &&
-                [...Array(Math.floor((100 - deductionPercentage) / 20))].map((_, i) => (
-                  <motion.div
-                    key={i}
-                    className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full"
-                    style={{
-                      left: `${(i + 1) * 20}%`,
-                    }}
-                    animate={{
-                      scale: [1, 1.5, 1],
-                      opacity: [0.7, 1, 0.7],
-                    }}
-                    transition={{
-                      repeat: Number.POSITIVE_INFINITY,
-                      duration: 2,
-                      delay: i * 0.3,
-                    }}
-                  />
-                ))}
-            </motion.div>
-          </div>
-
-          <div className="flex justify-between text-xs text-white/70 mb-4">
-            <span>Deducción: {formatCurrency(displayData.deductionAmount || 0)}</span>
-            <span>Base: {formatCurrency(displayData.bonusValue || 0)}</span>
-          </div>
-
-          <motion.div
-            className="bg-teal-600/30 backdrop-blur-sm rounded-lg p-4 mb-3 border border-white/10"
-            whileHover={{
-              backgroundColor: "rgba(13, 148, 136, 0.4)",
-              borderColor: "rgba(255, 255, 255, 0.2)",
-              y: -2,
-            }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="flex flex-col">
-                <div className="flex items-center text-teal-100 text-xs mb-1">
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                  <span>Valor base</span>
-                </div>
-                <span className="font-medium">{formatCurrency(displayData.bonusValue || 0)}</span>
-              </div>
-              <div className="flex flex-col">
-                <div className="flex items-center text-teal-100 text-xs mb-1">
-                  <AlertTriangle className="h-3 w-3 mr-1" />
-                  <span>Deducción</span>
-                </div>
-                <span className="font-medium text-red-200">-{formatCurrency(displayData.deductionAmount || 0)}</span>
-              </div>
-            </div>
-            <div className="mt-3 pt-3 border-t border-teal-500/30 flex justify-between items-center">
-              <span className="text-teal-100 text-xs">Valor final</span>
-              <motion.span
-                className="font-bold text-lg"
-                animate={{
-                  scale: [1, 1.03, 1],
-                  textShadow: [
-                    "0 0 0px rgba(255,255,255,0)",
-                    "0 0 3px rgba(255,255,255,0.5)",
-                    "0 0 0px rgba(255,255,255,0)",
-                  ],
-                }}
-                transition={{
-                  repeat: Number.POSITIVE_INFINITY,
-                  duration: 3,
-                  ease: "easeInOut",
-                }}
-              >
-                {formatCurrency(displayData.finalValue || 0)}
-              </motion.span>
-            </div>
-          </motion.div>
-
-          {data?.bonusData.deductions && data.bonusData.deductions.length > 0 ? (
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-sm border border-white/10 text-center">
-              <div className="flex items-center justify-center">
-                <CheckCircle2 className="h-4 w-4 mr-2 text-green-300" />
-                <span>Sin deducciones - Bono completo</span>
-              </div>
-            </div>
-          ) : null}
-
-          <AnimatePresence>
-            {showDeductions && data?.bonusData.deductions && data.bonusData.deductions.length > 0 && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="mt-3 overflow-hidden"
-              >
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 max-h-60 overflow-y-auto">
-                  <h6 className="font-medium text-white/90 mb-2 text-sm flex items-center justify-between">
-                    <span>Deducciones aplicadas:</span>
-                    <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
-                      Total: {formatCurrency(data.bonusData.deductions.reduce((sum, d) => sum + d.monto, 0))}
-                    </span>
-                  </h6>
-                  <div className="space-y-2">
-                    {data.bonusData.deductions.map((deduction) => (
-                      <motion.div
-                        key={deduction.id}
-                        className="bg-white/10 rounded-lg p-3 text-xs border border-white/10"
-                        whileHover={{
-                          backgroundColor: "rgba(255, 255, 255, 0.15)",
-                          borderColor: "rgba(255, 255, 255, 0.2)",
-                          y: -1,
-                        }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <div className="flex justify-between items-start">
-                          <span className="font-medium">{deduction.concepto}</span>
-                          <Badge variant="outline" className="border-white/20 text-white">
-                            {typeof deduction.porcentaje === "number"
-                              ? `${deduction.porcentaje}%`
-                              : deduction.porcentaje}
-                          </Badge>
-                        </div>
-                        <div className="mt-2 text-white/70">
-                          <div className="flex justify-between text-[10px] mb-1">
-                            <span>Fecha: {new Date(deduction.fechaInicio).toLocaleDateString("es-CO")}</span>
-                            <span>ID: {deduction.id}</span>
-                          </div>
-                        </div>
-                        <div className="mt-2 pt-2 border-t border-white/20 flex justify-between">
-                          <span>Monto:</span>
-                          <span className="font-medium">-{formatCurrency(deduction.monto)}</span>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </CardContent>
-        <CardFooter className="bg-teal-700/30 backdrop-blur-sm pt-3 pb-3 border-t border-white/10 relative z-10">
-          <motion.div
-            className="flex items-center w-full justify-center text-white/90 text-sm"
-            whileHover={{ scale: 1.02 }}
-            transition={{ duration: 0.3 }}
-          >
-            <Star className="h-4 w-4 mr-2" />
-            {deductionPercentage <= 10
-              ? "¡Bonificación completa!"
-              : deductionPercentage <= 30
-                ? "Bonificación parcial"
-                : "Bonificación reducida"}
-          </motion.div>
-        </CardFooter>
-      </motion.div>
-    </TooltipProvider>
-  )
-}
-
-// Enhanced ScoreCard component with more interactive elements
-function ScoreCard({
-  score,
-  monthlyScores,
-}: {
-  score: number
-  monthlyScores?: {
-    year: number
-    month: number
-    monthName: string
-    score: number
-  }[]
-}) {
-  const [selectedMonthIndex, setSelectedMonthIndex] = useState(0)
-
-  // Use monthly data if available
-  const displayData =
-    monthlyScores && monthlyScores.length > 0
-      ? monthlyScores[selectedMonthIndex]
-      : {
-          year: new Date().getFullYear(),
-          month: new Date().getMonth() + 1,
-          monthName: getMonthName(new Date().getMonth() + 1),
-          score: score,
-        }
-
-  const animatedScore = useAnimatedCounter(displayData.score, 1500, 600)
-  const levels = [
-    { name: "Bronce", threshold: 50, color: "text-amber-700" },
-    { name: "Plata", threshold: 75, color: "text-gray-400" },
-    { name: "Oro", threshold: 90, color: "text-yellow-500" },
-    { name: "Platino", threshold: 95, color: "text-blue-300" },
-  ]
-
-  const currentLevel = levels.reduce((prev, curr) => {
-    return displayData.score >= curr.threshold ? curr : prev
-  }, levels[0])
-
-  const nextLevel = levels.find((level) => level.threshold > displayData.score) || levels[levels.length - 1]
-  const pointsToNextLevel = nextLevel.threshold - displayData.score
-
-  // Navigate through available months
-  const navigateMonth = (direction: "prev" | "next") => {
-    if (!monthlyScores || !monthlyScores.length) return
-
-    if (direction === "prev" && selectedMonthIndex > 0) {
-      setSelectedMonthIndex(selectedMonthIndex - 1)
-    } else if (direction === "next" && selectedMonthIndex < monthlyScores.length - 1) {
-      setSelectedMonthIndex(selectedMonthIndex + 1)
-    }
-  }
-
   return (
     <motion.div
       variants={cardVariants}
       initial="initial"
       animate="animate"
       whileHover="hover"
-      className="relative bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl shadow-lg overflow-hidden"
+      className="w-full h-full"
     >
-      <DecorativePattern variant="circles" />
+      <Card className="relative bg-gradient-to-br from-white via-green-50/30 to-white border-2 border-green-100 shadow-xl overflow-hidden backdrop-blur-sm h-full flex flex-col">
+        <DecorativePattern variant="grid" color="#8b5cf6" />
 
-      {/* Enhanced decorative elements with animations */}
-      <motion.div
-        className="absolute top-0 right-0 w-32 h-32 -mt-10 -mr-10 bg-white/10 rounded-full blur-2xl"
-        animate={{
-          scale: [1, 1.05, 1],
-          opacity: [0.5, 0.7, 0.5],
-        }}
-        transition={{
-          repeat: Number.POSITIVE_INFINITY,
-          duration: 5,
-          ease: "easeInOut",
-        }}
-      />
-      <motion.div
-        className="absolute bottom-0 left-0 w-24 h-24 -mb-8 -ml-8 bg-white/10 rounded-full blur-xl"
-        animate={{
-          scale: [1, 1.1, 1],
-          opacity: [0.3, 0.5, 0.3],
-        }}
-        transition={{
-          repeat: Number.POSITIVE_INFINITY,
-          duration: 4,
-          ease: "easeInOut",
-          delay: 1,
-        }}
-      />
-
-      {/* Enhanced animated particles */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {[...Array(8)].map((_, i) => (
-          <motion.div
-            key={i}
-            className="absolute w-1 h-1 bg-white/40 rounded-full"
-            style={{
-              top: `${Math.random() * 100}%`,
-              left: `${Math.random() * 100}%`,
-            }}
-            animate={{
-              y: [0, -20, 0],
-              opacity: [0, 1, 0],
-              scale: [0.8, 1.2, 0.8],
-            }}
-            transition={{
-              duration: 2 + Math.random() * 2,
-              repeat: Number.POSITIVE_INFINITY,
-              delay: Math.random() * 5,
-            }}
-          />
-        ))}
-      </div>
-
-      <CardHeader className="pb-2 text-white relative z-10">
-        <div className="flex justify-between items-start">
-          <div>
-            <CardTitle className="text-xl flex items-center">
-              <Award className="h-5 w-5 mr-2" />
-              Mi Puntaje Mensual
-            </CardTitle>
-            <CardDescription className="text-teal-100">Rendimiento general</CardDescription>
-          </div>
-          <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm">
-            <motion.span
-              animate={{
-                color: ["#ffffff", currentLevel.color.replace("text-", "#"), "#ffffff"],
-              }}
-              transition={{
-                repeat: Number.POSITIVE_INFINITY,
-                duration: 3,
-                ease: "easeInOut",
-              }}
-            >
-              Nivel {currentLevel.name}
-            </motion.span>
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="pb-4 text-white relative z-10">
-        {/* Month navigation */}
-        {monthlyScores && monthlyScores.length > 0 && (
-          <div className="flex items-center justify-between mb-4 bg-white/10 backdrop-blur-sm rounded-lg p-2">
+        <CardHeader className="pb-3 relative z-10 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg">
+                <TrendingUp className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-lg font-bold bg-gradient-to-r from-green-700 to-green-600 bg-clip-text text-transparent">
+                  Progreso Anual
+                </CardTitle>
+                <CardDescription className="text-green-600/70 font-medium text-sm">
+                  {annualData?.year || selectedYear}
+                </CardDescription>
+              </div>
+            </div>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="text-white hover:bg-white/20 p-1 h-8 w-8"
-              onClick={() => navigateMonth("prev")}
-              disabled={selectedMonthIndex <= 0}
+              onClick={() => fetchData(selectedYear || 0)}
+              disabled={isLoading}
+              className="h-9 px-3 border-green-200 hover:bg-green-50 bg-white/80 backdrop-blur-sm shadow-sm"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""} text-green-600`} />
             </Button>
+          </div>
+        </CardHeader>
 
-            <div className="flex items-center">
-              <Calendar className="h-4 w-4 mr-2" />
-              <span className="font-medium">
-                {displayData.monthName} {displayData.year}
-              </span>
+        <CardContent className="flex-1 space-y-4 relative z-10 pb-4">
+          {/* Year Selector - Compact */}
+          <Select value={selectedYear?.toString() || ""} onValueChange={(value) => setSelectedYear(Number(value))}>
+            <SelectTrigger className="w-full h-9 border-green-200 bg-white/80 backdrop-blur-sm shadow-sm text-sm">
+              <SelectValue placeholder="Seleccionar año" />
+            </SelectTrigger>
+            <SelectContent>
+              {data?.availableYears?.map((year: number) => (
+                <SelectItem key={year} value={year.toString()}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Main Metric - Compact */}
+          <div className="text-center py-3">
+            <div className="text-3xl font-bold bg-gradient-to-r from-green-700 to-green-600 bg-clip-text text-transparent">
+              {animatedCombinedPercentage}%
+            </div>
+            <div className="text-sm text-green-600/70 font-medium">Rendimiento general</div>
+          </div>
+
+          {/* Progress Indicators - Compact */}
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-medium text-green-700">Kilómetros</span>
+              <span className="text-xs font-bold text-green-700">{annualData?.kilometers.percentage || 0}%</span>
+            </div>
+            <div className="w-full bg-green-100 rounded-full h-2 overflow-hidden">
+              <motion.div
+                className="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min(100, annualData?.kilometers.percentage || 0)}%` }}
+                transition={{ duration: 1.5, ease: "easeOut" }}
+              />
             </div>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-white hover:bg-white/20 p-1 h-8 w-8"
-              onClick={() => navigateMonth("next")}
-              disabled={selectedMonthIndex >= monthlyScores.length - 1}
-            >
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
-
-        <div className="flex justify-center my-4">
-          <div className="relative w-36 h-36">
-            {/* Enhanced background circle with subtle animation */}
-            <motion.div
-              className="absolute inset-0 rounded-full"
-              style={{
-                background:
-                  "conic-gradient(from 180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.2) 100%)",
-              }}
-              animate={{ rotate: 360 }}
-              transition={{ duration: 20, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
-            />
-
-            <svg className="w-full h-full" viewBox="0 0 100 100">
-              {/* Enhanced background circle with gradient */}
-              <defs>
-                <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="rgba(255,255,255,0.1)" />
-                  <stop offset="100%" stopColor="rgba(255,255,255,0.3)" />
-                </linearGradient>
-              </defs>
-              |
-              <circle cx="50" cy="50" r="45" fill="url(#bgGradient)" />
-              <motion.circle
-                cx="50"
-                cy="50"
-                r="42"
-                fill="transparent"
-                strokeWidth="4"
-                stroke="rgba(255,255,255,0.5)"
-                style={{
-                  strokeDasharray: 264,
-                  strokeDashoffset: 264 - (animatedScore / 100) * 264,
-                }}
-                animate={{
-                  strokeDashoffset: [264, 264 - (animatedScore / 100) * 264],
-                }}
-                transition={{ duration: 1.5, ease: "easeInOut" }}
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-medium text-green-700">Bonificaciones</span>
+              <span className="text-xs font-bold text-green-700">{annualData?.bonus.percentage || 0}%</span>
+            </div>
+            <div className="w-full bg-green-100 rounded-full h-2 overflow-hidden">
+              <motion.div
+                className="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min(100, annualData?.bonus.percentage || 0)}%` }}
+                transition={{ duration: 1.5, ease: "easeOut", delay: 0.2 }}
               />
-            </svg>
-
-            <motion.div
-              className="absolute inset-0 flex items-center justify-center"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1, duration: 0.5 }}
-            >
-              <motion.span className="text-4xl font-bold text-white drop-shadow-md">{animatedScore}</motion.span>
-            </motion.div>
+            </div>
           </div>
-        </div>
 
-        <div className="text-center text-white/80 mb-3">
-          {pointsToNextLevel > 0 ? (
-            <span>
-              Faltan <span className="font-medium">{pointsToNextLevel} puntos</span> para alcanzar el nivel{" "}
-              <span className="font-medium">{nextLevel.name}</span>
-            </span>
-          ) : (
-            <span>¡Felicidades! Has alcanzado el nivel máximo</span>
-          )}
-        </div>
-
-        <motion.div
-          className="flex items-center text-teal-100 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 text-sm border border-white/10"
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.5, duration: 0.5 }}
-          whileHover={{
-            backgroundColor: "rgba(255, 255, 255, 0.15)",
-            borderColor: "rgba(255, 255, 255, 0.2)",
-            x: 2,
-          }}
-        >
-          <TrendingUp className="h-4 w-4 mr-2" />
-          <span>Progreso del mes</span>
-        </motion.div>
-      </CardContent>
-      <CardFooter className="bg-cyan-700/30 backdrop-blur-sm pt-3 pb-3 border-t border-white/10 relative z-10">
-        <motion.div
-          className="flex items-center w-full justify-center text-white/90 text-sm"
-          whileHover={{ scale: 1.02 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Star className="h-4 w-4 mr-2" />
-          Sigue mejorando tu puntaje
-        </motion.div>
-      </CardFooter>
+          {/* Summary Stats - Compact */}
+          <div className="bg-white/60 backdrop-blur-sm rounded-lg p-3 border border-green-100">
+            <div className="text-xs text-green-600/70 font-medium mb-1">Meses con datos</div>
+            <div className="text-lg font-bold text-green-700">{annualData?.monthsWithData || 0}/12</div>
+          </div>
+        </CardContent>
+      </Card>
     </motion.div>
   )
 }
 
-// Main ProgressCards component with React Query
-function ProgressCardsWithProvider({ userCode }: { userCode: string }) {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ProgressCards userCode={userCode} />
-    </QueryClientProvider>
-  )
-}
+const MonthlyProgressCard: React.FC<{ userCode: string }> = ({ userCode }) => {
+  const [data, setData] = useState<any>(null)
+  const [bonusData, setBonusData] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedYear, setSelectedYear] = useState<number | null>(null)
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null)
 
-// Main ProgressCards component
-function ProgressCards({ userCode }: { userCode: string }) {
-  // Debug panel for troubleshooting
-  const DebugPanel = () => {
-    if (!DEBUG_MODE) return null
+  const fetchData = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
 
+      // Fetch both kilometers and bonus data for the specific month
+      const [kmResult, bonusResult] = await Promise.all([
+        api.fetchKilometers({
+          userCode,
+          year: selectedYear || undefined,
+          month: selectedMonth || undefined,
+        }),
+        api.fetchBonuses({
+          userCode,
+          year: selectedYear || undefined,
+          month: selectedMonth || undefined,
+        }),
+      ])
+
+      setData(kmResult)
+      setBonusData(bonusResult)
+
+      // Set defaults if not set
+      if (!selectedYear && kmResult.availableYears?.length) {
+        setSelectedYear(kmResult.availableYears[0])
+      }
+      if (!selectedMonth && kmResult.availableMonths?.length) {
+        setSelectedMonth(kmResult.availableMonths[kmResult.availableMonths.length - 1])
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error desconocido")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (userCode) {
+      fetchData()
+    }
+  }, [userCode, selectedYear, selectedMonth])
+
+  // Calculate monthly combined performance
+  const monthlyData = useMemo(() => {
+    if (!data || !bonusData || !selectedYear || !selectedMonth) return null
+
+    // Get kilometers data for the specific month
+    const kmMonthData = data.monthlyData?.find(
+      (item: any) => item.year === selectedYear && item.month === selectedMonth,
+    )
+
+    // Get bonus data for the specific month
+    let bonusMonthData = bonusData?.monthlyBonusData?.find(
+      (item: any) => item.year === selectedYear && item.month === selectedMonth,
+    )
+
+    // If monthlyBonusData is empty but we have bonusData, use the direct data
+    if (!bonusMonthData && bonusData?.bonusData) {
+      bonusMonthData = {
+        year: selectedYear,
+        month: selectedMonth,
+        bonusValue: bonusData.summary?.baseBonus || getBaseBonusForYear(selectedYear),
+        baseBonus: bonusData.summary?.baseBonus || getBaseBonusForYear(selectedYear),
+        finalValue: bonusData.summary?.finalBonus,
+        finalBonus: bonusData.summary?.finalBonus,
+        deductionAmount: bonusData.summary?.totalDeduction || 0,
+      }
+    }
+
+    if (!kmMonthData && !bonusMonthData) return null
+
+    const kmPercentage = kmMonthData?.percentage || 0
+
+    // Handle bonus data with more robust logic
+    let baseBonus = bonusMonthData?.bonusValue || bonusMonthData?.baseBonus || 0
+    if (!baseBonus && selectedYear) {
+      // Fallback to year-specific base bonus if no bonus data is found for the month
+      baseBonus = getBaseBonusForYear(selectedYear)
+    }
+
+    const deductionAmount = bonusMonthData?.deductionAmount || 0
+    const finalBonus = baseBonus - deductionAmount
+    let bonusPercentage = 0
+
+    if (baseBonus > 0) {
+      bonusPercentage = Math.round((finalBonus / baseBonus) * 100)
+    } else if (bonusMonthData) {
+      // If there's data but baseBonus is 0, it might still be 100% if final is also 0
+      bonusPercentage = 100
+    }
+
+    // Calculate combined performance percentage
+    const combinedPercentage = Math.round((kmPercentage + bonusPercentage) / 2)
+
+    return {
+      year: selectedYear,
+      month: selectedMonth,
+      monthName: getMonthName(selectedMonth),
+      kilometers: {
+        executed: kmMonthData?.valor_ejecucion || 0,
+        programmed: kmMonthData?.valor_programacion || 0,
+        percentage: kmPercentage,
+      },
+      bonus: {
+        base: baseBonus,
+        final: finalBonus,
+        percentage: bonusPercentage,
+        deduction: deductionAmount,
+      },
+      combinedPercentage,
+    }
+  }, [data, bonusData, selectedYear, selectedMonth])
+
+  const animatedCombinedPercentage = useAnimatedCounter(monthlyData?.combinedPercentage || 0)
+
+  if (isLoading) {
     return (
-      <div className="mb-6 p-4 bg-gray-800 text-white rounded-lg text-xs font-mono">
-        <div className="flex justify-between items-center mb-2">
-          <h3 className="font-bold">Debug Panel</h3>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-6 text-xs"
-            onClick={() => {
-              queryClient.invalidateQueries({ queryKey: ["kilometers"] })
-              queryClient.invalidateQueries({ queryKey: ["bonuses"] })
-              console.log("Manual refresh triggered from debug panel")
-            }}
-          >
-            Refresh Data
+      <Card className="rounded-xl shadow-md overflow-hidden">
+        <CardHeader className="pb-2">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-4 w-56 mt-1" />
+        </CardHeader>
+        <CardContent className="pb-4">
+          <Skeleton className="h-8 w-full mb-4" />
+          <Skeleton className="h-32 w-full mb-4" />
+          <Skeleton className="h-20 w-full rounded-lg" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className="rounded-xl shadow-md overflow-hidden">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg font-semibold flex items-center">
+            <AlertTriangle className="h-5 w-5 mr-2 text-red-500" />
+            Error al cargar datos mensuales
+          </CardTitle>
+          <CardDescription>Por favor, inténtalo de nuevo más tarde.</CardDescription>
+        </CardHeader>
+        <CardContent className="pb-4">
+          <p className="text-gray-600">{error}</p>
+          <Button variant="outline" size="sm" className="mt-4 bg-transparent" onClick={() => fetchData()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Reintentar
           </Button>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <h4 className="text-gray-400 mb-1">Cache Info:</h4>
-            <div className="bg-gray-900 p-2 rounded">
-              <p>User Code: {userCode || "Not set"}</p>
-              <p>Kilometers Cache: {queryClient.getQueryState(["kilometers", userCode])?.status || "unknown"}</p>
-              <p>Bonuses Cache: {queryClient.getQueryState(["bonuses", userCode])?.status || "unknown"}</p>
-            </div>
-          </div>
-          <div>
-            <h4 className="text-gray-400 mb-1">React Query:</h4>
-            <div className="bg-gray-900 p-2 rounded">
-              <p>Cache Time: 10 minutes</p>
-              <p>Stale Time: 5 minutes</p>
-              <p>Auto Refetch: Disabled</p>
-            </div>
-          </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     )
   }
 
   return (
-    <>
-      <DebugPanel />
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {userCode && <KilometersCard userCode={userCode} />}
-        {userCode && <BonusCard userCode={userCode} />}
-        {/* El componente ScoreCard se añadirá cuando tenga su propia API */}
-      </div>
-    </>
+    <motion.div variants={cardVariants} initial="initial" animate="animate" whileHover="hover" className="w-full">
+      <Card className="relative bg-gradient-to-br from-white via-green-50/30 to-white border-2 border-green-100 shadow-xl overflow-hidden backdrop-blur-sm">
+        <DecorativePattern variant="dots" color="#10b981" />
+
+        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-green-200/20 to-green-300/10 rounded-full blur-3xl -translate-y-16 translate-x-16" />
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-green-100/30 to-green-200/20 rounded-full blur-2xl translate-y-12 -translate-x-12" />
+
+        <CardHeader className="pb-4 relative z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg">
+                <BarChart3 className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-xl font-bold bg-gradient-to-r from-green-700 to-green-600 bg-clip-text text-transparent">
+                  Progreso Mensual
+                </CardTitle>
+                <CardDescription className="text-green-600/70 font-medium">
+                  Rendimiento detallado del mes
+                </CardDescription>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchData}
+              disabled={isLoading}
+              className="h-10 px-4 border-green-200 hover:bg-green-50 bg-white/80 backdrop-blur-sm shadow-sm"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""} text-green-600`} />
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-6 relative z-10">
+          <div className="flex gap-3">
+            <Select value={selectedYear?.toString() || ""} onValueChange={(value) => setSelectedYear(Number(value))}>
+              <SelectTrigger className="w-36 h-10 border-green-200 bg-white/80 backdrop-blur-sm shadow-sm">
+                <SelectValue placeholder="Seleccionar año" />
+              </SelectTrigger>
+              <SelectContent>
+                {data?.availableYears?.map((year: number) => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedMonth?.toString() || ""} onValueChange={(value) => setSelectedMonth(Number(value))}>
+              <SelectTrigger className="w-36 h-10 border-green-200 bg-white/80 backdrop-blur-sm shadow-sm">
+                <SelectValue placeholder="Seleccionar mes" />
+              </SelectTrigger>
+              <SelectContent>
+                {data?.availableMonths?.map((month: number) => (
+                  <SelectItem key={month} value={month.toString()}>
+                    {new Date(2024, month - 1).toLocaleDateString("es-ES", { month: "long" })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {monthlyData ? (
+            <div className="space-y-6">
+              {/* Combined Performance Score */}
+              <div className="bg-gradient-to-r from-green-50 to-white rounded-2xl p-6 border border-green-100 shadow-sm">
+                <div className="text-center mb-6">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Target className="h-5 w-5 text-green-600" />
+                    <span className="text-green-700 font-semibold">
+                      Rendimiento {monthlyData.monthName} {monthlyData.year}
+                    </span>
+                  </div>
+                  <div className="text-4xl font-bold bg-gradient-to-r from-green-600 to-green-700 bg-clip-text text-transparent mb-2">
+                    {animatedCombinedPercentage}%
+                  </div>
+                  <p className="text-green-600 text-sm">Promedio de kilómetros y bonificaciones</p>
+                </div>
+
+                <div className="relative w-full bg-green-100 rounded-full h-4 mb-6 overflow-hidden">
+                  <motion.div
+                    className="bg-gradient-to-r from-green-500 to-green-600 h-4 rounded-full shadow-sm"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(monthlyData.combinedPercentage, 100)}%` }}
+                    transition={{ duration: 2, ease: "easeOut" }}
+                  />
+                </div>
+
+                {/* Detailed breakdown */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Kilometers Section */}
+                  <div className="bg-white/60 rounded-xl p-4 border border-green-100">
+                    <div className="flex items-center gap-2 mb-3">
+                      <TrendingUp className="h-4 w-4 text-green-600" />
+                      <span className="font-semibold text-green-700">Kilómetros</span>
+                      <Badge className="bg-green-100 text-green-700 border-0 ml-auto">
+                        {monthlyData.kilometers.percentage}%
+                      </Badge>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-green-600">Ejecutado:</span>
+                        <span className="font-medium">{monthlyData.kilometers.executed.toLocaleString()} km</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-green-600">Programado:</span>
+                        <span className="font-medium">{monthlyData.kilometers.programmed.toLocaleString()} km</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bonus Section */}
+                  <div className="bg-white/60 rounded-xl p-4 border border-green-100">
+                    <div className="flex items-center gap-2 mb-3">
+                      <DollarSign className="h-4 w-4 text-green-600" />
+                      <span className="font-semibold text-green-700">Bonificaciones</span>
+                      <Badge className="bg-green-100 text-green-700 border-0 ml-auto">
+                        {monthlyData.bonus.percentage}%
+                      </Badge>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-green-600">Bono Final:</span>
+                        <span className="font-medium">${monthlyData.bonus.final.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-green-600">Bono Base:</span>
+                        <span className="font-medium">${monthlyData.bonus.base.toLocaleString()}</span>
+                      </div>
+                      {monthlyData.bonus.deduction > 0 && (
+                        <div className="flex justify-between text-sm pt-1 mt-1 border-t border-green-100">
+                          <span className="text-red-600">Deducciones:</span>
+                          <span className="font-medium text-red-600">
+                            -${monthlyData.bonus.deduction.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <BarChart3 className="h-8 w-8 text-green-600" />
+              </div>
+              <p className="text-green-600 font-medium">No hay datos disponibles para este mes</p>
+              <p className="text-green-500 text-sm mt-1">Selecciona un período diferente</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
   )
 }
 
-export default ProgressCardsWithProvider
+function getBaseBonusForYear(year: number): number {
+  switch (year) {
+    case 2025:
+      return 142000
+    case 2024:
+      return 135000
+    case 2023:
+      return 128000
+    case 2022:
+    case 2021:
+    case 2020:
+      return 122000
+    default:
+      return 122000
+  }
+}
+
+const ProgressCardsOptimized: React.FC<{ userCode: string }> = ({ userCode }) => {
+  return (
+    <div className="w-full max-w-7xl mx-auto p-4 sm:p-6">
+      <motion.div
+        className="grid grid-cols-1 md:grid-cols-2 gap-6"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.6 }}
+      >
+        <AnnualProgressCard userCode={userCode} />
+        <MonthlyProgressCard userCode={userCode} />
+        <KilometersCard userCode={userCode} />
+        <BonusCard userCode={userCode} />
+      </motion.div>
+    </div>
+  )
+}
+
+export default ProgressCardsOptimized

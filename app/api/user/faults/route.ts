@@ -28,7 +28,7 @@ async function handleGet(request: Request) {
 
   console.log(`[Faults] Solicitud para usuario: ${userCode}, año: ${year || 'todos'}`)
 
-  // Obtener servicio de faltas
+  // Obtener servicio de Novedades
   const faultsService = getFaultsService()
 
   try {
@@ -38,7 +38,7 @@ async function handleGet(request: Request) {
       year,
     })
 
-    console.log(`[Faults] Datos obtenidos: ${result.data.length} tipos de faltas`)
+    console.log(`[Faults] Datos obtenidos: ${result.data.length} tipos de Novedades`)
 
     // Respuesta exitosa
     return apiResponse.success({

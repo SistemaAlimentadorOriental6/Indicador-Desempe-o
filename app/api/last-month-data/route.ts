@@ -85,7 +85,6 @@ export async function GET(request: Request) {
       ]
       const monthName = `${monthNames[month - 1]} ${year}`
 
-      // Query to get kilometros for the last month
       let kilometrosQuery = `
         SELECT SUM(valor_ejecucion) as total
         FROM variables_control

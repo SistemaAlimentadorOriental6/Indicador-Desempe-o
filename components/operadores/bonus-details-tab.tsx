@@ -136,14 +136,24 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
   const [showFaultsMatrix, setShowFaultsMatrix] = useState(true)
   const [showFilters, setShowFilters] = useState(false)
   const [faultDaysByYear, setFaultDaysByYear] = useState<{ [key: string]: { [year: number]: number } }>({})
-  // Estado para el modal de detalle de faltas
-  const [detalleFaltas, setDetalleFaltas] = useState<any[] | null>(null)
+  // Estado para el modal de detalle de Novedades
+  const [detalleNovedades, setDetalleNovedades] = useState<any[] | null>(null)
   const [detalleLoading, setDetalleLoading] = useState(false)
   const [detalleModal, setDetalleModal] = useState<{codigo: string, year: number, descripcion: string} | null>(null)
   
   // Estado para el modal de tabla de deducciones
   const [showDeductionsTable, setShowDeductionsTable] = useState(false)
   const [selectedFaultCode, setSelectedFaultCode] = useState<string | null>(null)
+  
+  // Estado para el modal de detalles de falta específica
+  const [showFaultDetailsModal, setShowFaultDetailsModal] = useState(false)
+  const [selectedFaultDetails, setSelectedFaultDetails] = useState<{
+    codigo: string
+    descripcion: string
+    year?: number
+    deductions: Deduction[]
+  } | null>(null)
+  const [faultDetailsLoading, setFaultDetailsLoading] = useState(false)
 
   useEffect(() => {
     if (data?.deductions) {
@@ -165,7 +175,6 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
     }
   }, [data])
 
-  // Inicializar con el año y mes actual
   useEffect(() => {
     const currentDate = new Date()
     const currentYear = currentDate.getFullYear()
@@ -184,13 +193,13 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
   const handleOpenDetalle = async (codigo: string, year: number, descripcion: string) => {
     setDetalleModal({ codigo, year, descripcion })
     setDetalleLoading(true)
-    setDetalleFaltas(null)
+    setDetalleNovedades(null)
     try {
       const res = await fetch(`/api/user/faults?codigo=${userCode}&codigo=${codigo}&year=${year}&detalle=1`)
       const json = await res.json()
-      setDetalleFaltas(json?.data ?? json)
+      setDetalleNovedades(json?.data ?? json)
     } catch (e) {
-      setDetalleFaltas([])
+      setDetalleNovedades([])
     } finally {
       setDetalleLoading(false)
     }
@@ -202,6 +211,33 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
     setSelectedFaultCode(codigo)
     setShowDeductionsTable(true)
     console.log("Estado showDeductionsTable:", true)
+  }
+
+  // Función para abrir el modal de detalles de falta específica
+  const handleOpenFaultDetails = async (codigo: string, descripcion: string, year?: number) => {
+    setFaultDetailsLoading(true)
+    setShowFaultDetailsModal(true)
+    setSelectedFaultDetails({ codigo, descripcion, year, deductions: [] })
+    
+    try {
+      // Filtrar las deducciones existentes por código de falta
+      const filteredDeductions = data?.deductions?.filter(deduction => {
+        const matchesCode = deduction.codigo === codigo
+        const matchesYear = year ? new Date(deduction.fechaInicio).getFullYear() === year : true
+        return matchesCode && matchesYear
+      }) || []
+      
+      setSelectedFaultDetails({
+        codigo,
+        descripcion,
+        year,
+        deductions: filteredDeductions
+      })
+    } catch (error) {
+      console.error('Error al cargar detalles de falta:', error)
+    } finally {
+      setFaultDetailsLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -256,12 +292,12 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
       try {
         setFaultsLoading(true)
         const res = await fetch(`/api/user/faults?codigo=${userCode}`)
-        if (!res.ok) throw new Error("Error al obtener datos de faltas")
+        if (!res.ok) throw new Error("Error al obtener datos de Novedades")
         const json = await res.json()
         setFaultsData(json?.data ?? json)
       } catch (err: any) {
         console.error("Error fetching faults:", err)
-        // No mostrar error al usuario ya que las faltas son opcionales
+        // No mostrar error al usuario ya que las Novedades son opcionales
         setFaultsData(null)
       } finally {
         setFaultsLoading(false)
@@ -518,7 +554,7 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                   <AlertTriangle className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-800">Historial Completo de Faltas</h3>
+                  <h3 className="text-lg font-bold text-slate-800">Historial Completo de Novedades</h3>
                   <p className="text-sm text-slate-600">Registro detallado de todas las incidencias por año</p>
                 </div>
               </div>
@@ -526,7 +562,7 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                 {faultsData && faultsData.data && faultsData.data.length > 0 && (
                   <div className="bg-emerald-100 px-3 py-1 rounded-lg">
                     <span className="text-xs font-semibold text-emerald-700">
-                      {faultsData.data.length} tipos de faltas registradas
+                      {faultsData.data.length} tipos de Novedades registradas
                     </span>
                   </div>
                 )}
@@ -549,7 +585,7 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
               {faultsLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin text-orange-500 mr-2" />
-                  <span className="text-slate-600">Cargando historial completo de faltas...</span>
+                  <span className="text-slate-600">Cargando historial completo de Novedades...</span>
                 </div>
               ) : faultsData && faultsData.data && faultsData.data.length > 0 ? (
                 <div className="space-y-6">
@@ -561,7 +597,7 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                         <div className="text-2xl font-bold text-orange-700">
                           {Object.values(faultsData.totalByYear).reduce((a, b) => a + b, 0)}
                         </div>
-                        <div className="text-sm font-semibold text-orange-600">Total Faltas</div>
+                        <div className="text-sm font-semibold text-orange-600">Total Novedades</div>
                         <div className="text-xs text-orange-500">Historial completo</div>
                       </div>
                       <div className="text-center">
@@ -581,7 +617,7 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                           {(Object.values(faultsData.totalByYear).reduce((a, b) => a + b, 0) / faultsData.availableYears.length).toFixed(1)}
                         </div>
                         <div className="text-sm font-semibold text-orange-600">Promedio Anual</div>
-                        <div className="text-xs text-orange-500">Faltas por año</div>
+                        <div className="text-xs text-orange-500">Novedades por año</div>
                       </div>
                     </div>
                   </div>
@@ -602,7 +638,7 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                             <div className="text-center">
                               <div className="text-2xl font-bold text-orange-800">{yearTotal}</div>
                               <div className="text-sm font-semibold text-orange-600">{year}</div>
-                              <div className="text-xs text-orange-500">Total faltas</div>
+                              <div className="text-xs text-orange-500">Total Novedades</div>
                               <div className="w-full bg-orange-200 rounded-full h-2 mt-2">
                                 <div
                                   className="bg-gradient-to-r from-orange-500 to-orange-600 h-2 rounded-full transition-all duration-500"
@@ -616,7 +652,7 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                     </div>
                   </div>
 
-                  {/* Matriz de Faltas Completa */}
+                  {/* Matriz de Novedades Completa */}
                   <div>
                     <h4 className="text-lg font-bold text-slate-800 mb-4">Matriz Detallada de Incidencias</h4>
                     <div className="overflow-x-auto">
@@ -638,7 +674,10 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                               </th>
                             ))}
                             <th className="border-2 border-orange-300 px-4 py-3 text-center text-sm font-bold text-orange-800 min-w-[80px]">
-                              Total
+                              Total Novedades
+                            </th>
+                            <th className="border-2 border-orange-300 px-4 py-3 text-center text-sm font-bold text-orange-800 min-w-[80px]">
+                              Total Días
                             </th>
                           </tr>
                         </thead>
@@ -692,8 +731,8 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                                                         ? "bg-orange-500 text-white"
                                                         : "bg-slate-100 text-slate-400"
                                                 }`}
-                                              title="Ver tabla de deducciones"
-                                              onClick={() => handleOpenDeductionsTable(fault.codigo)}
+                                              title={`Ver detalles de ${fault.descripcion} en ${year}`}
+                                              onClick={() => handleOpenFaultDetails(fault.codigo, fault.descripcion, year)}
                                             >
                                               {count}
                                             </button>
@@ -721,12 +760,77 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                                         {totalFaults}
                                       </span>
                                     ) : (
-                                      <span className="text-emerald-600 font-semibold text-sm">Sin faltas</span>
+                                      <span className="text-emerald-600 font-semibold text-sm">Sin Novedades</span>
                                     )}
+                                  </td>
+                                  <td className="border border-slate-300 px-4 py-3 text-center">
+                                    {(() => {
+                                      const totalDays = Object.values(faultDaysByYear[fault.codigo] || {}).reduce((sum: number, days: number) => sum + days, 0)
+                                      return totalDays > 0 ? (
+                                        <span
+                                          className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-sm font-bold ${
+                                            totalDays >= 30
+                                              ? "bg-red-600 text-white"
+                                              : totalDays >= 15
+                                                ? "bg-amber-600 text-white"
+                                                : totalDays >= 5
+                                                  ? "bg-orange-600 text-white"
+                                                  : "bg-blue-600 text-white"
+                                          }`}
+                                          title={`Total de días históricos: ${totalDays}`}
+                                        >
+                                          {totalDays}d
+                                        </span>
+                                      ) : (
+                                        <span className="text-emerald-600 font-semibold text-sm">0d</span>
+                                      )
+                                    })()} 
                                   </td>
                                 </tr>
                               )
                             })}
+                          {/* Fila de totales generales */}
+                          <tr className="bg-gradient-to-r from-slate-100 to-slate-200 font-bold">
+                            <td className="border-2 border-slate-400 px-4 py-3 sticky left-0 bg-slate-100">
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-blue-600"></div>
+                                <span className="text-sm font-bold text-slate-800">TOTAL HISTÓRICO</span>
+                              </div>
+                            </td>
+                            <td className="border-2 border-slate-400 px-3 py-3 text-center">
+                              <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 text-blue-700">
+                                ALL
+                              </span>
+                            </td>
+                            {faultsData.availableYears.map((year) => {
+                              const yearTotal = faultsData.totalByYear[year] || 0
+                              const yearTotalDays = Object.values(faultDaysByYear).reduce((sum, faultYears) => {
+                                return sum + (faultYears[year] || 0)
+                              }, 0)
+                              return (
+                                <td key={year} className="border-2 border-slate-400 px-4 py-3 text-center">
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span className="text-sm font-bold text-slate-800">{yearTotal}</span>
+                                    {yearTotalDays > 0 && (
+                                      <span className="text-xs text-slate-600">({yearTotalDays}d)</span>
+                                    )}
+                                  </div>
+                                </td>
+                              )
+                            })}
+                            <td className="border-2 border-slate-400 px-4 py-3 text-center">
+                              <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-sm font-bold bg-blue-600 text-white">
+                                {Object.values(faultsData.totalByYear).reduce((a, b) => a + b, 0)}
+                              </span>
+                            </td>
+                            <td className="border-2 border-slate-400 px-4 py-3 text-center">
+                              <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-sm font-bold bg-blue-600 text-white">
+                                {Object.values(faultDaysByYear).reduce((sum, faultYears) => {
+                                  return sum + Object.values(faultYears).reduce((yearSum: number, days: number) => yearSum + days, 0)
+                                }, 0)}d
+                              </span>
+                            </td>
+                          </tr>
                         </tbody>
                       </table>
                     </div>
@@ -748,7 +852,7 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                           <div className="text-xl font-bold text-blue-700">
                             {Math.max(...Object.values(faultsData.totalByYear))}
                           </div>
-                          <div className="text-sm font-semibold text-blue-600">Año con Más Faltas</div>
+                          <div className="text-sm font-semibold text-blue-600">Año con Más Novedades</div>
                           <div className="text-xs text-blue-500">
                             {Object.keys(faultsData.totalByYear).find(
                               year => faultsData.totalByYear[Number(year)] === Math.max(...Object.values(faultsData.totalByYear))
@@ -759,7 +863,7 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                           <div className="text-xl font-bold text-blue-700">
                             {Math.min(...Object.values(faultsData.totalByYear))}
                           </div>
-                          <div className="text-sm font-semibold text-blue-600">Año con Menos Faltas</div>
+                          <div className="text-sm font-semibold text-blue-600">Año con Menos Novedades</div>
                           <div className="text-xs text-blue-500">
                             {Object.keys(faultsData.totalByYear).find(
                               year => faultsData.totalByYear[Number(year)] === Math.min(...Object.values(faultsData.totalByYear))
@@ -776,7 +880,7 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                     <CheckCircle className="w-8 h-8 text-emerald-600" />
                   </div>
                   <h3 className="text-lg font-bold text-slate-600 mb-2">¡Excelente Historial!</h3>
-                  <p className="text-slate-500">No se encontraron faltas registradas en todo el período analizado</p>
+                  <p className="text-slate-500">No se encontraron Novedades registradas en todo el período analizado</p>
                   <div className="mt-4 text-xs text-slate-400">
                     Esto indica un desempeño ejemplar sin incidencias disciplinarias
                   </div>
@@ -784,72 +888,6 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
               )}
             </div>
           )}
-        </div>
-
-        {/* Explicación de las deducciones */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-200">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
-              <Info className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-blue-800">¿Cómo se calculan las deducciones?</h3>
-              <p className="text-sm text-blue-600">Explicación de los valores mostrados</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white/70 rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center gap-2 mb-2">
-                <Percent className="w-4 h-4 text-blue-600" />
-                <span className="text-sm font-semibold text-blue-700">% a Retirar</span>
-              </div>
-              <p className="text-sm text-slate-700">
-                Porcentaje del bono base que se descuenta. Puede ser un valor fijo (ej: 1%) o por día.
-              </p>
-            </div>
-            <div className="bg-white/70 rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center gap-2 mb-2">
-                <Calculator className="w-4 h-4 text-blue-600" />
-                <span className="text-sm font-semibold text-blue-700">Valor Calculado</span>
-              </div>
-              <p className="text-sm text-slate-700">
-                Monto calculado basado en el porcentaje y el bono base actual ({formatCurrency(data.baseBonus ?? 0)}).
-              </p>
-            </div>
-            <div className="bg-white/70 rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center gap-2 mb-2">
-                <DollarSign className="w-4 h-4 text-blue-600" />
-                <span className="text-sm font-semibold text-blue-700">Monto Real</span>
-              </div>
-              <p className="text-sm text-slate-700">
-                Cantidad efectivamente descontada del bono final. Puede diferir del valor calculado.
-              </p>
-            </div>
-          </div>
-          
-          {/* Nueva sección sobre bonos completos */}
-          <div className="mt-6 bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl p-4 border-2 border-emerald-200">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
-                <CheckCircle className="w-4 h-4 text-emerald-600" />
-              </div>
-              <h4 className="text-base font-bold text-emerald-800">Sistema de Bonos Completos</h4>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div className="bg-white/70 rounded-lg p-3 border border-emerald-200">
-                <p className="font-semibold text-emerald-700 mb-1">¿Cuándo se considera completo?</p>
-                <p className="text-slate-700">
-                  Un mes se considera con bono completo cuando no hay deducciones registradas que afecten ese período específico.
-                </p>
-              </div>
-              <div className="bg-white/70 rounded-lg p-3 border border-emerald-200">
-                <p className="font-semibold text-emerald-700 mb-1">¿Cómo se mantiene?</p>
-                <p className="text-slate-700">
-                  El bono se mantiene completo hasta que se registre una deducción que afecte ese mes específico.
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Tabla de deducciones */}
@@ -1214,9 +1252,9 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                 <Loader2 className="w-6 h-6 animate-spin text-orange-500 mr-2" />
                 <span className="text-slate-600">Cargando detalles...</span>
               </div>
-            ) : detalleFaltas && detalleFaltas.length > 0 ? (
+            ) : detalleNovedades && detalleNovedades.length > 0 ? (
               <div className="space-y-3 max-h-80 overflow-y-auto">
-                {detalleFaltas.map((falta) => (
+                {detalleNovedades.map((falta) => (
                   <div key={falta.id} className="bg-orange-50 border-l-4 border-orange-400 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-1">
                       <Calendar className="w-4 h-4 text-orange-500" />
@@ -1409,10 +1447,10 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                         <td className="px-4 py-3 text-center text-sm text-blue-600 font-medium">No Afecta Desempeño</td>
                       </tr>
 
-                      {/* Segunda sección - Daños y faltas */}
+                      {/* Segunda sección - Daños y Novedades */}
                       <tr className="bg-slate-50">
                         <td colSpan={5} className="px-4 py-2">
-                          <h3 className="text-sm font-bold text-slate-700">Daños y Faltas</h3>
+                          <h3 className="text-sm font-bold text-slate-700">Daños y Novedades</h3>
                         </td>
                       </tr>
                       <tr className="hover:bg-slate-50">
@@ -1704,6 +1742,201 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Detalles de Falta Específica */}
+      {showFaultDetailsModal && selectedFaultDetails && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
+            {/* Header del Modal */}
+            <div className="bg-gradient-to-r from-orange-50 to-amber-50 px-6 py-4 border-b border-orange-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-orange-800">
+                      Registro de Deducciones - {selectedFaultDetails.descripcion}
+                    </h3>
+                    <p className="text-orange-600 text-sm">
+                      Código: {selectedFaultDetails.codigo}
+                      {selectedFaultDetails.year && ` • Año: ${selectedFaultDetails.year}`}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowFaultDetailsModal(false)
+                    setSelectedFaultDetails(null)
+                  }}
+                  className="p-2 hover:bg-orange-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-orange-600" />
+                </button>
+              </div>
+            </div>
+
+            {/* Contenido del Modal */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              {faultDetailsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-orange-500 mr-3" />
+                  <span className="text-slate-600 font-medium">Cargando detalles...</span>
+                </div>
+              ) : selectedFaultDetails.deductions.length > 0 ? (
+                <div className="space-y-6">
+                  {/* Resumen */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-200">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div className="text-2xl font-bold text-blue-700">
+                          {selectedFaultDetails.deductions.length}
+                        </div>
+                        <div className="text-sm font-semibold text-blue-600">Total Registros</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-blue-700">
+                          {selectedFaultDetails.deductions.reduce((sum, d) => sum + (d.dias || 0), 0)}
+                        </div>
+                        <div className="text-sm font-semibold text-blue-600">Total Días</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-blue-700">
+                          {formatCurrency(selectedFaultDetails.deductions.reduce((sum, d) => sum + calcularValorActual(d, data?.baseBonus || 142000), 0))}
+                        </div>
+                        <div className="text-sm font-semibold text-blue-600">Total Deducido</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabla de Deducciones */}
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse bg-white rounded-xl overflow-hidden shadow-sm">
+                      <thead>
+                        <tr className="bg-gradient-to-r from-slate-50 to-slate-100">
+                          <th className="border-2 border-slate-200 px-4 py-3 text-left text-sm font-bold text-slate-700">CÓDIGO</th>
+                          <th className="border-2 border-slate-200 px-4 py-3 text-left text-sm font-bold text-slate-700">CAUSA</th>
+                          <th className="border-2 border-slate-200 px-4 py-3 text-center text-sm font-bold text-slate-700">% A RETIRAR</th>
+                          <th className="border-2 border-slate-200 px-4 py-3 text-center text-sm font-bold text-slate-700">VALOR ACTUAL</th>
+                          <th className="border-2 border-slate-200 px-4 py-3 text-center text-sm font-bold text-slate-700">MONTO</th>
+                          <th className="border-2 border-slate-200 px-4 py-3 text-center text-sm font-bold text-slate-700">PERÍODO</th>
+                          <th className="border-2 border-slate-200 px-4 py-3 text-center text-sm font-bold text-slate-700">OBSERVACIONES</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedFaultDetails.deductions.map((deduction, index) => {
+                          const valorActual = calcularValorActual(deduction, data?.baseBonus || 142000)
+                          const severity = getDeductionSeverity(typeof deduction.porcentaje === 'number' ? deduction.porcentaje * 100 : 0)
+                          return (
+                            <tr key={deduction.id} className={`${index % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-orange-50 transition-colors`}>
+                              <td className="border border-slate-200 px-4 py-3">
+                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${
+                                  severity.color === 'red' ? 'bg-red-100 text-red-700' :
+                                  severity.color === 'amber' ? 'bg-amber-100 text-amber-700' :
+                                  severity.color === 'blue' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-emerald-100 text-emerald-700'
+                                }`}>
+                                  {deduction.codigo}
+                                </span>
+                              </td>
+                              <td className="border border-slate-200 px-4 py-3">
+                                <div>
+                                  <div className="font-semibold text-slate-800">{deduction.concepto}</div>
+                                  <div className={`text-xs font-medium ${
+                                    severity.color === 'red' ? 'text-red-600' :
+                                    severity.color === 'amber' ? 'text-amber-600' :
+                                    severity.color === 'blue' ? 'text-blue-600' :
+                                    'text-emerald-600'
+                                  }`}>
+                                    Impacto: {severity.label}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="border border-slate-200 px-4 py-3 text-center">
+                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${
+                                  typeof deduction.porcentaje === 'string' && deduction.porcentaje.toLowerCase().includes('día')
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : 'bg-orange-100 text-orange-700'
+                                }`}>
+                                  {typeof deduction.porcentaje === 'string' && deduction.porcentaje.toLowerCase().includes('día')
+                                    ? `Día${deduction.dias ? ` (${deduction.dias} días)` : ''}`
+                                    : `${typeof deduction.porcentaje === 'number' ? (deduction.porcentaje * 100).toFixed(1) : deduction.porcentaje}%`
+                                  }
+                                </span>
+                              </td>
+                              <td className="border border-slate-200 px-4 py-3 text-center">
+                                <div className="text-sm font-bold text-slate-700">
+                                  {formatCurrency(valorActual)}
+                                </div>
+                                <div className="text-xs text-slate-500">Valor calculado</div>
+                              </td>
+                              <td className="border border-slate-200 px-4 py-3 text-center">
+                                <div className="text-sm font-bold text-red-600">
+                                  {formatCurrency(valorActual)}
+                                </div>
+                                <div className="text-xs text-red-500">Monto real</div>
+                              </td>
+                              <td className="border border-slate-200 px-4 py-3 text-center">
+                                <div className="text-sm font-medium text-slate-700">
+                                  {new Date(deduction.fechaInicio).toLocaleDateString('es-CO', {
+                                    day: '2-digit',
+                                    month: '2-digit', 
+                                    year: 'numeric'
+                                  })}
+                                </div>
+                                {deduction.fechaFin && (
+                                  <div className="text-xs text-slate-500">
+                                    hasta {new Date(deduction.fechaFin).toLocaleDateString('es-CO', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                      year: 'numeric'
+                                    })}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="border border-slate-200 px-4 py-3">
+                                <div className="flex items-center justify-center">
+                                  {deduction.observaciones ? (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger>
+                                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center cursor-pointer hover:bg-blue-200 transition-colors">
+                                            <Info className="w-4 h-4 text-blue-600" />
+                                          </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p className="max-w-xs">{deduction.observaciones}</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  ) : (
+                                    <span className="text-slate-400 text-sm">Sin observaciones</span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FileText className="w-8 h-8 text-slate-400" />
+                  </div>
+                  <h4 className="text-lg font-semibold text-slate-600 mb-2">No hay registros</h4>
+                  <p className="text-slate-500">
+                    No se encontraron deducciones para {selectedFaultDetails.descripcion}
+                    {selectedFaultDetails.year && ` en el año ${selectedFaultDetails.year}`}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
