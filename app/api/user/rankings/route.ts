@@ -314,7 +314,7 @@ export async function GET(request: Request) {
         GROUP BY v.codigo_empleado
       ) km_data ON o.codigo = km_data.codigo_empleado
       
-      -- LEFT JOIN para detalles de novedades (JSON)
+      -- LEFT JOIN para detalles de novedades (JSON) - Corregido para capturar períodos que se extienden
       LEFT JOIN (
         SELECT 
           n.codigo_empleado,
@@ -330,8 +330,16 @@ export async function GET(request: Request) {
           ) AS detalles
         FROM novedades n FORCE INDEX (idx_novedades_fecha_inicio)
         WHERE ${filterType === 'year' 
-          ? 'YEAR(n.fecha_inicio_novedad) = ?' 
-          : 'YEAR(n.fecha_inicio_novedad) = ? AND MONTH(n.fecha_inicio_novedad) = ?'
+          ? `(
+              YEAR(n.fecha_inicio_novedad) = ? OR 
+              YEAR(IFNULL(n.fecha_fin_novedad, CURDATE())) = ? OR
+              (n.fecha_inicio_novedad <= ? AND (n.fecha_fin_novedad >= ? OR n.fecha_fin_novedad IS NULL))
+            )`
+          : `(
+              (YEAR(n.fecha_inicio_novedad) = ? AND MONTH(n.fecha_inicio_novedad) = ?) OR
+              (YEAR(IFNULL(n.fecha_fin_novedad, CURDATE())) = ? AND MONTH(IFNULL(n.fecha_fin_novedad, CURDATE())) = ?) OR
+              (n.fecha_inicio_novedad <= ? AND (n.fecha_fin_novedad >= ? OR n.fecha_fin_novedad IS NULL))
+            )`
         }
         GROUP BY n.codigo_empleado
       ) novedad_data ON o.codigo = novedad_data.codigo_empleado
@@ -344,7 +352,24 @@ export async function GET(request: Request) {
     console.log(`📊 Ejecutando consulta SUPER optimizada para ${filterType}...`);
     
     // Ejecutar la consulta super optimizada
-    const novedadesParams = filterType === 'year' ? [filterYear] : [filterYear, filterMonth];
+    let novedadesParams: (string | number)[] = [];
+    if (filterType === 'year') {
+      novedadesParams = [
+        filterYear, // YEAR(n.fecha_inicio_novedad) = ?
+        filterYear, // YEAR(IFNULL(n.fecha_fin_novedad, CURDATE())) = ?
+        `${filterYear}-12-31`, // n.fecha_inicio_novedad <= ?
+        `${filterYear}-01-01`  // n.fecha_fin_novedad >= ?
+      ];
+    } else {
+      const monthValue = filterMonth || currentMonth;
+      novedadesParams = [
+        filterYear, monthValue, // YEAR y MONTH inicio
+        filterYear, monthValue, // YEAR y MONTH fin
+        `${filterYear}-${String(monthValue).padStart(2, '0')}-31`, // fecha_inicio <= último día del mes
+        `${filterYear}-${String(monthValue).padStart(2, '0')}-01`  // fecha_fin >= primer día del mes
+      ];
+    }
+    
     const queryParams = [
       ...dateFilters.params,
       ...dateFilters.params,
@@ -481,8 +506,17 @@ export async function GET(request: Request) {
         const rule = factorMap.get(novedad.codigo_factor);
         if (rule) {
           let deductionAmount = 0;
+          let days = 1;
+          
+          // Calcular días correctamente
+          if (novedad.fecha_inicio_novedad && novedad.fecha_fin_novedad) {
+            const startDate = new Date(novedad.fecha_inicio_novedad);
+            const endDate = new Date(novedad.fecha_fin_novedad);
+            days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+          }
+          
           if (rule.porcentajeRetirar === 'Día') {
-            deductionAmount = rule.valorActual * (novedad.dias_totales || 1);
+            deductionAmount = rule.valorActual * days;
           } else if (typeof rule.porcentajeRetirar === 'number') {
             deductionAmount = baseBonus * rule.porcentajeRetirar;
           }
@@ -498,9 +532,13 @@ export async function GET(request: Request) {
           }
           deductionDetails.push({
             reason: rule.causa,
+            observation: novedad.observaciones || '',
             amount: deductionAmount,
-            date: novedad.fecha_inicio_novedad,
-            affectsPerformance: rule.afectaDesempeno
+            days: days,
+            start: novedad.fecha_inicio_novedad,
+            end: novedad.fecha_fin_novedad,
+            affectsPerformance: rule.afectaDesempeno,
+            factor: novedad.codigo_factor
           });
         }
       });

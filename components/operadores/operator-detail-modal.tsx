@@ -375,7 +375,7 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
   const bonusTotalText = formatCurrency(bonusTotal)
   const bonusObjectiveText = `${bonusPercentage.toFixed(1)}% del objetivo`
 
-  const bonusDeductions: Array<{ reason: string; observation?: string; start?: string; end?: string }> =
+  const bonusDeductions: Array<{ reason: string; observation?: string; start?: string; end?: string; amount?: number; days?: number; affectsPerformance?: boolean }> =
     (currentOperator as any).bonus?.deductions || []
 
   const executedKm = currentOperator.km?.total_ejecutado ?? currentOperator.km?.total ?? 0
@@ -742,7 +742,7 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Bonos Card */}
                       <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200">
                         <div className="flex items-center justify-between mb-4">
@@ -754,11 +754,16 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
                             <div className="text-sm text-emerald-600 font-medium">{bonusObjectiveText}</div>
                           </div>
                         </div>
-                        <div className="w-full bg-emerald-100 rounded-full h-2">
+                        <div className="w-full bg-emerald-100 rounded-full h-2 relative">
                           <div
                             className="bg-gradient-to-r from-emerald-400 to-emerald-500 h-2 rounded-full transition-all duration-1000"
                             style={{ width: `${bonusPercentClamped}%` }}
                           />
+                          {bonusDeductions.length > 0 && (
+                            <div className="absolute top-0 right-0 h-2 bg-red-400 rounded-r-full" 
+                                 style={{ width: `${Math.min(100 - bonusPercentClamped, 20)}%` }}
+                                 title="Deducciones aplicadas" />
+                          )}
                         </div>
                         <div className="mt-2 text-xs text-slate-500">
                           Bonos {filterType === 'year' ? 'Anuales' : 'Mensuales'}
@@ -784,28 +789,6 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
                         </div>
                         <div className="mt-2 text-xs text-slate-500">
                           Kilómetros {filterType === 'year' ? 'Anuales' : 'Mensuales'}
-                        </div>
-                      </div>
-
-                      {/* Consistencia Card */}
-                      <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-500 rounded-xl flex items-center justify-center">
-                            <Target className="w-6 h-6 text-white" />
-                          </div>
-                          <div className="text-right">
-                            <div className="text-2xl font-bold text-slate-800">{consistencyText}</div>
-                            <div className="text-sm text-blue-600 font-medium">Estabilidad</div>
-                          </div>
-                        </div>
-                        <div className="w-full bg-blue-100 rounded-full h-2">
-                          <div
-                            className="bg-gradient-to-r from-blue-400 to-blue-500 h-2 rounded-full transition-all duration-1000"
-                            style={{ width: `${consistency}%` }}
-                          />
-                        </div>
-                        <div className="mt-2 text-xs text-slate-500">
-                          Consistencia {filterType === 'year' ? 'Anual' : 'Semanal'}
                         </div>
                       </div>
                     </div>
@@ -842,24 +825,52 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
                               {bonusPercentage.toFixed(1)}%
                             </span>
                           </div>
+                          {bonusDeductions.length > 0 && (
+                            <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+                              <span className="text-sm text-red-600">Total Deducciones</span>
+                              <span className="font-bold text-red-600">
+                                -{formatCurrency(bonusDeductions.reduce((sum, ded) => sum + (ded.amount || 0), 0))}
+                              </span>
+                            </div>
+                          )}
 
                           {bonusDeductions && bonusDeductions.length > 0 && (
                             <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
                               <h4 className="text-sm font-semibold text-red-700 mb-2">
-                                Deducciones del Periodo
+                                Deducciones del Periodo ({bonusDeductions.length})
                               </h4>
-                              <div className="space-y-2">
-                                {bonusDeductions.slice(0, 3).map((ded, idx) => (
-                                  <div key={idx} className="text-xs text-red-600">
-                                    <div className="font-medium">{ded.reason}</div>
+                              <div className="space-y-3">
+                                {bonusDeductions.slice(0, 4).map((ded, idx) => (
+                                  <div key={idx} className="text-xs border-l-2 border-red-300 pl-3">
+                                    <div className="flex justify-between items-start mb-1">
+                                      <div className="font-medium text-red-700">{ded.reason}</div>
+                                      {ded.amount && (
+                                        <div className="font-bold text-red-600">
+                                          -{formatCurrency(ded.amount)}
+                                        </div>
+                                      )}
+                                    </div>
                                     {ded.observation && (
-                                      <div className="text-red-500 mt-1">{ded.observation}</div>
+                                      <div className="text-red-500 mb-1">{ded.observation}</div>
                                     )}
+                                    <div className="flex gap-2 text-red-400">
+                                      {ded.days && ded.days > 1 && (
+                                        <span>{ded.days} días</span>
+                                      )}
+                                      {ded.start && (
+                                        <span>{new Date(ded.start).toLocaleDateString('es-CO')}</span>
+                                      )}
+                                      {ded.affectsPerformance && (
+                                        <span className="bg-red-100 px-1 rounded text-red-600 font-medium">
+                                          Afecta rendimiento
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 ))}
-                                {bonusDeductions.length > 3 && (
-                                  <div className="text-xs text-red-500 font-medium">
-                                    +{bonusDeductions.length - 3} más...
+                                {bonusDeductions.length > 4 && (
+                                  <div className="text-xs text-red-500 font-medium text-center pt-2 border-t border-red-200">
+                                    +{bonusDeductions.length - 4} deducciones más...
                                   </div>
                                 )}
                               </div>
