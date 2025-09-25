@@ -16,7 +16,7 @@ export interface Operator {
     bonus?: {
       percentage: number
       total: number
-      category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia" | "Revisar"
+      category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
       trend: "up" | "down" | "stable"
       date: string | null
     }
@@ -25,12 +25,12 @@ export interface Operator {
       total?: number
       total_programado?: number
       total_ejecutado?: number
-      category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia" | "Revisar"
+      category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
       trend: "up" | "down" | "stable"
       date: string | null
     }
     efficiency: number
-    category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia" | "Revisar"
+    category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
     rank: number
     weeklyPerformance?: number[]
     department?: string
@@ -48,7 +48,7 @@ export interface Operator {
     }
   }
   
-  export type FilterType = "all" | "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia" | "Revisar"
+  export type FilterType = "all" | "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
   export type SortType = "rank" | "bonus" | "km" | "efficiency"
   export type ViewMode = "grid" | "list"
   export type SortOrder = "asc" | "desc"

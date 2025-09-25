@@ -1,5 +1,5 @@
 import { getDatabase } from '../database'
-import { getCache } from '../cache'
+import { getCacheManager } from '../cache-manager'
 import { getDeductionRule } from '../deductions-config'
 
 // Mapeo de códigos de factor a porcentajes de deducción y descripción exactos según tabla
@@ -26,6 +26,16 @@ export interface Deduction {
   observaciones?: string
 }
 
+export interface MonthlyBonusData {
+  year: number
+  month: number
+  monthName: string
+  bonusValue: number
+  deductionAmount: number
+  finalValue: number
+  hasDeductions?: boolean
+}
+
 export interface BonusData {
   baseBonus: number
   deductionPercentage: number
@@ -34,6 +44,7 @@ export interface BonusData {
   expiresInDays: number | null
   bonusesByYear: Record<string, number>
   deductions: Deduction[]
+  monthlyBonusData?: MonthlyBonusData[]
   lastMonthData?: {
     year: number
     month: number
@@ -56,7 +67,7 @@ export interface BonusData {
 class BonusesService {
   private static instance: BonusesService
   private db = getDatabase()
-  private cache = getCache()
+  private cache = getCacheManager()
 
   private constructor() {}
 
@@ -67,31 +78,22 @@ class BonusesService {
     return BonusesService.instance
   }
 
-  // Obtener bonos para un usuario específico
+  // Obtener datos de usuario con caché
   async getUserBonuses(params: {
     userCode: string
     year?: number
     month?: number
   }): Promise<BonusData> {
-    // Generar clave de caché
-    const cacheKey = this.cache.getUserDataKey(params.userCode, 'bonuses', {
-      year: params.year || 'current',
-      month: params.month || 'current',
-    })
+    // Generar clave de caché específica
+    const cacheKey = `bonuses:${params.userCode}:${params.year || 'current'}:${params.month || 'all'}`
 
-    // Intentar obtener de caché
-    const cached = await this.cache.get(cacheKey)
-    if (cached) {
-      return cached
-    }
-
-    // Si no está en caché, obtener de base de datos
-    const result = await this.fetchBonusesFromDB(params)
-
-    // Guardar en caché
-    await this.cache.set(cacheKey, result, this.cache.TTL.DEFAULT)
-
-    return result
+    // Usar getOrSet para simplificar la lógica
+    return await this.cache.getOrSet(
+      cacheKey,
+      () => this.fetchBonusesFromDB(params),
+      604800, // 7 días en segundos (TTL semanal como solicitado)
+      'bonuses'
+    )
   }
 
   // Obtener datos de bonos de la base de datos
@@ -165,13 +167,15 @@ class BonusesService {
 
     // Obtener datos del último mes o del mes consultado
     let lastMonthData
+    let monthlyBonusData: MonthlyBonusData[] | undefined
+
+    const monthNames = [
+      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ]
+
     if (isSpecificMonth) {
       // Si es un mes específico, mostrar los datos de ese mes
-      const monthNames = [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
-      ]
-      
       lastMonthData = {
         year: currentYear,
         month: currentMonth!,
@@ -182,6 +186,55 @@ class BonusesService {
         hasDeductions: !hasNoDeductions,
         message: hasNoDeductions ? "Sin deducciones - Bono completo" : undefined
       }
+    } else if (params.year && !params.month) {
+      // Si solo se especifica el año, generar datos mensuales para todo el año
+      monthlyBonusData = []
+      
+      for (let month = 1; month <= 12; month++) {
+        // Obtener deducciones específicas para este mes
+        const monthQuery = `
+          SELECT id, fecha_inicio_novedad, fecha_fin_novedad, codigo_empleado, codigo_factor, 
+                 observaciones,
+                 DATEDIFF(IFNULL(fecha_fin_novedad, CURDATE()), fecha_inicio_novedad) + 1 as dias_novedad
+          FROM novedades
+          WHERE codigo_empleado = ?
+            AND (
+              (YEAR(fecha_inicio_novedad) = ? AND MONTH(fecha_inicio_novedad) = ?) OR
+              (fecha_fin_novedad IS NOT NULL AND 
+               YEAR(fecha_fin_novedad) = ? AND MONTH(fecha_fin_novedad) = ?) OR
+              (fecha_inicio_novedad <= LAST_DAY(?) AND 
+               (fecha_fin_novedad IS NULL OR fecha_fin_novedad >= ?))
+            )
+          ORDER BY fecha_inicio_novedad DESC
+        `
+        
+        const firstDayOfMonth = `${params.year}-${String(month).padStart(2, '0')}-01`
+        const lastDayOfMonth = new Date(params.year, month, 0).toISOString().split('T')[0]
+        
+        const monthNovedades = await this.db.executeQuery<any[]>(monthQuery, [
+          params.userCode, params.year, month, params.year, month, lastDayOfMonth, firstDayOfMonth
+        ])
+        
+        // Procesar deducciones del mes
+        const monthDeductions = this.processDeductions(monthNovedades, baseBonus)
+        const monthDeductionAmount = Math.min(
+          monthDeductions.reduce((sum, d) => sum + d.monto, 0),
+          baseBonus
+        )
+        const monthFinalBonus = baseBonus - monthDeductionAmount
+        
+        monthlyBonusData.push({
+          year: currentYear,
+          month: month,
+          monthName: monthNames[month - 1],
+          bonusValue: baseBonus,
+          deductionAmount: monthDeductionAmount,
+          finalValue: monthFinalBonus,
+          hasDeductions: monthNovedades.length > 0
+        })
+      }
+      
+      lastMonthData = this.getLastMonthData(novedades, params.userCode)
     } else {
       lastMonthData = this.getLastMonthData(novedades, params.userCode)
     }
@@ -194,6 +247,7 @@ class BonusesService {
       expiresInDays,
       bonusesByYear,
       deductions,
+      monthlyBonusData,
       lastMonthData,
       availableYears,
       availableMonths,
@@ -453,22 +507,18 @@ class BonusesService {
     // Valores exactos según tabla proporcionada
     switch (year) {
       case 2025:
-        return 142000;
+        return 142000; // Valor para 2025
       case 2024:
-        return 130000;
+        return 135000; // Valor para 2024
       case 2023:
-        return 100000;
+        return 128000; // Valor para 2023
       case 2022:
-        return 100000;
       case 2021:
-        return 100000;
       case 2020:
-        return 100000;
-      case 2019:
-        return 100000;
+        return 122000; // Valor para 2022, 2021 y 2020
       default:
-        // Para años anteriores a 2019 o futuros, usar valor base
-        return year < 2019 ? 100000 : 142000;
+        // Para años anteriores a 2020, usar valor base
+        return 122000;
     }
   }
 

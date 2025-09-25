@@ -80,8 +80,6 @@ const getCategoryIcon = (category: string) => {
       return <AlertTriangle className="w-4 h-4" />
     case "Taller Conciencia":
       return <AlertCircle className="w-4 h-4" />
-    case "Revisar":
-      return <Search className="w-4 h-4" />
     default:
       return <Award className="w-4 h-4" />
   }
@@ -99,8 +97,6 @@ const getCategoryColor = (category: string) => {
       return { bg: "bg-gradient-to-r from-orange-400 to-orange-600" }
     case "Taller Conciencia":
       return { bg: "bg-gradient-to-r from-red-400 to-red-600" }
-    case "Revisar":
-      return { bg: "bg-gradient-to-r from-purple-400 to-purple-600" }
     default:
       return { bg: "bg-gradient-to-r from-gray-400 to-gray-600" }
   }
@@ -638,10 +634,6 @@ export default function OperatorsGrid({ operators, onOperatorClick }: OperatorsG
   // Get unique categories
   const categories = useMemo(() => {
     const uniqueCategories = [...new Set(finalOperators.map((op) => op.category))]
-    // Agregar 'Revisar' como categoría estática
-    if (!uniqueCategories.includes('Revisar')) {
-      uniqueCategories.push('Revisar')
-    }
     return uniqueCategories
   }, [finalOperators])
 

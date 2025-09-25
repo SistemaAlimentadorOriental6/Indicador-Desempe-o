@@ -9,6 +9,7 @@ export interface DeductionRule {
 
 export const DEDUCTION_RULES: DeductionRule[] = [
   // Novedades que afectan rendimiento
+  { item: '0', causa: 'Sin Deducción', porcentajeRetirar: 0, valorActual: 0, observacion: 'No Afecta Desempeño', afectaDesempeno: false },
   { item: '1', causa: 'Incapacidad', porcentajeRetirar: 0.25, valorActual: 35500, observacion: 'Sí', afectaDesempeno: true },
   { item: '2', causa: 'Ausentismo', porcentajeRetirar: 1.00, valorActual: 142000, observacion: 'Sí', afectaDesempeno: true },
   { item: '5', causa: 'Retardo', porcentajeRetirar: 0.25, valorActual: 35500, observacion: 'Sí', afectaDesempeno: true },

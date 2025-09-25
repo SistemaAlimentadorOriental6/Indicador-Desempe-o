@@ -34,7 +34,7 @@ const FACTOR_DEDUCTIONS: Record<string, number | string> = {
 
 // Función para obtener el valor base del bono según el año
 function getBaseBonusForYear(year: number): number {
-  // Valores consistentes con bonus-config.ts
+  // Valores exactos según tabla proporcionada
   switch (year) {
     case 2025:
       return 142000; // Valor para 2025
@@ -47,7 +47,7 @@ function getBaseBonusForYear(year: number): number {
     case 2020:
       return 122000; // Valor para 2022, 2021 y 2020
     default:
-      // Para años anteriores a 2020 o no especificados
+      // Para años anteriores a 2020, usar valor base
       return 122000;
   }
 }
@@ -112,6 +112,7 @@ async function handleGet(request: Request) {
         deductionAmount: 0,
         deductions: [],
         bonusesByYear: {},
+        monthlyBonusData: result.monthlyBonusData,
         availableBonuses: 0,
         availableYears: result.availableYears,
         availableMonths: result.availableMonths,
@@ -150,6 +151,7 @@ async function handleGet(request: Request) {
       expiresInDays: result.expiresInDays,
       bonusesByYear: result.bonusesByYear,
       deductions: result.deductions,
+      monthlyBonusData: result.monthlyBonusData,
       lastMonthData: result.lastMonthData,
       availableYears: result.availableYears,
       availableMonths: result.availableMonths,

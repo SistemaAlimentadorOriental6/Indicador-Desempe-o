@@ -1,9 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import mysql from "mysql2/promise"
+import { getDatabase } from "@/lib/database"
 
 // Mapeo de códigos de factor a porcentajes de deducción
 const FACTOR_DEDUCTIONS: Record<string, number | string> = {
   // Códigos numéricos
+  "0": 0, // Sin Deducción
   "1": 25, // Incapacidad
   "2": 100, // Ausentismo
   "3": "Día", // Incapacidad > 7 días
@@ -58,6 +60,7 @@ const DAILY_DEDUCTION = 4333
 // Función para obtener el concepto basado en el código
 function getConceptoByCode(codigo: string): string {
   const conceptos: Record<string, string> = {
+    "0": "Sin Deducción",
     "1": "Incapacidad",
     "2": "Ausentismo",
     "3": "Incapacidad > 7 días",
@@ -124,8 +127,8 @@ async function processUserData(connection: mysql.Connection, codigo: string, yea
   // Ordenar por fecha de inicio de novedad (más reciente primero)
   query += " ORDER BY fecha_inicio_novedad DESC"
 
-  // Ejecutar la consulta
-  const [rows] = await connection.execute(query, queryParams)
+  // 🚀 OPTIMIZACIÓN: Ejecutar consulta usando pool compartido con deduplicación
+  const rows = await db.executeBonusQuery(query, queryParams, true)
   const novedades = rows as any[]
 
   // Si no hay novedades, devolver datos básicos
@@ -309,7 +312,8 @@ async function getAvailableYearsForCodes(connection: mysql.Connection, codigos: 
     ORDER BY year DESC
   `
   
-  const [rows] = await connection.execute(query, codigos)
+  // 🚀 OPTIMIZACIÓN: Ejecutar consulta usando pool compartido con deduplicación
+  const rows = await db.executeBonusQuery(query, codigos, true)
   const years = (rows as any[]).map(r => r.year).filter(y => y !== null)
   
   // Si no hay años, devolver un fallback
@@ -328,17 +332,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Se requiere un array de códigos." }, { status: 400 })
   }
 
-  let connection: mysql.Connection | null = null
   try {
-    connection = await mysql.createConnection(process.env.DATABASE_URL || "")
+    // 🚀 OPTIMIZACIÓN: Usar pool compartido en lugar de conexión individual
+    const db = getDatabase()
+    console.log('🔗 Usando pool compartido de MySQL para bonuses (eliminando conexión individual)')
 
     // Obtener último año y mes global disponibles si no se proporcionan
     let processingYear = year || null
     let processingMonth: number | null = month || null
 
     if (!processingMonth) {
-      const [maxDateRows] = await connection.execute(
-        `SELECT YEAR(MAX(fecha_inicio_novedad)) as year, MONTH(MAX(fecha_inicio_novedad)) as month FROM novedades`
+      // 🚀 OPTIMIZACIÓN: Usar pool compartido con cache para consulta de fecha máxima
+      const maxDateRows = await db.executeBonusQuery<Array<{year: number, month: number}>>(
+        `SELECT YEAR(MAX(fecha_inicio_novedad)) as year, MONTH(MAX(fecha_inicio_novedad)) as month FROM novedades`,
+        [],
+        true // Habilitar cache para esta consulta común
       )
       if (Array.isArray(maxDateRows) && maxDateRows.length > 0) {
         const row: any = maxDateRows[0]
@@ -376,8 +384,6 @@ export async function POST(request: NextRequest) {
     console.error("Error en el batch de bonos:", error)
     return NextResponse.json({ success: false, message: "Error interno del servidor." }, { status: 500 })
   } finally {
-    if (connection) {
-      await connection.end()
-    }
+    // 🚀 OPTIMIZACIÓN: Pool se gestiona automáticamente, no necesita .end()
   }
 }

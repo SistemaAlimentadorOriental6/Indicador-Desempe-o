@@ -5,6 +5,7 @@ import sql from "mssql";
 import { optimizedCache } from "@/lib/cache";
 import { DEDUCTION_RULES } from "@/lib/deductions-config";
 import { getMssqlPool } from "@/lib/mssql";
+import { getDatabase } from "@/lib/database";
 import {
   determineBonusCategory,
   determineKmCategory,
@@ -109,16 +110,6 @@ import { operators as demoOperators } from "@/data/operators-data";
 //   "HCC-GV": "Hábitos y Conductas Gravísimo",
 // };
 
-// Función optimizada para crear conexión
-async function createOptimizedConnection() {
-  return await mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME
-  });
-}
-
 // Función optimizada para construir filtros de fecha
 function buildDateFilters(filterType: string, filterYear: number, filterMonth?: number) {
   if (filterType === 'year') {
@@ -177,11 +168,13 @@ export async function GET(request: Request) {
   // Si el filtro es global, determinar el último año/mes con novedades para usarlo como referencia
   if (filterType === 'global') {
     try {
-      const tmpConnection = await createOptimizedConnection();
-      const [maxRows] = await tmpConnection.execute(
-        `SELECT YEAR(MAX(fecha_inicio_novedad)) as year, MONTH(MAX(fecha_inicio_novedad)) as month FROM novedades`
+      // 🚀 OPTIMIZACIÓN: Usar pool compartido en lugar de conexión individual
+      const db = getDatabase();
+      const maxRows = await db.executeRankingsQuery<Array<{year: number, month: number}>>(
+        `SELECT YEAR(MAX(fecha_inicio_novedad)) as year, MONTH(MAX(fecha_inicio_novedad)) as month FROM novedades`,
+        [],
+        true // Habilitar cache para esta consulta común
       );
-      await tmpConnection.end();
 
       if (Array.isArray(maxRows) && maxRows.length > 0) {
         const row: any = maxRows[0];
@@ -227,19 +220,9 @@ export async function GET(request: Request) {
       });
     }
 
-    // Crear conexión optimizada
-    let connection;
-    try {
-      connection = await createOptimizedConnection();
-    } catch (dbError) {
-      console.error("Error al conectar con la base de datos:", dbError);
-      return NextResponse.json({ 
-        success: true, 
-        data: demoOperators,
-        isDemoData: true,
-        error: "Error de conexión a la base de datos"
-      });
-    }
+    // 🚀 OPTIMIZACIÓN: Usar pool compartido en lugar de conexión individual
+    const db = getDatabase();
+    console.log('🔗 Usando pool compartido de MySQL (eliminando conexión individual)');
 
     const queryStartTime = Date.now();
     
@@ -376,7 +359,8 @@ export async function GET(request: Request) {
       ...novedadesParams,
       ...mainWhereParams,
     ];
-    const [rows] = await connection.execute(superOptimizedQuery, queryParams);
+    // 🚀 OPTIMIZACIÓN: Usar pool compartido con cache para la consulta principal
+    const rows = await db.executeRankingsQuery(superOptimizedQuery, queryParams, true);
     
     const queryEndTime = Date.now();
     console.log(`⚡ Consulta SUPER optimizada ejecutada en ${queryEndTime - queryStartTime}ms`);
@@ -385,7 +369,7 @@ export async function GET(request: Request) {
     
     if (!users || users.length === 0) {
       console.warn("No se encontraron usuarios.");
-      await connection.end();
+      // 🚀 OPTIMIZACIÓN: Pool se gestiona automáticamente, no necesita .end()
       return NextResponse.json({ 
         success: true, 
         data: demoOperators,
@@ -621,7 +605,7 @@ export async function GET(request: Request) {
     }).filter(Boolean); // Filtrar nulos de forma optimizada
     
     if (rankings.length === 0 && (filterType === 'year' || filterType === 'month')) {
-      await connection.end();
+      // 🚀 OPTIMIZACIÓN: Pool se gestiona automáticamente, no necesita .end()
       return NextResponse.json({
         success: true,
         data: [],
@@ -664,7 +648,7 @@ export async function GET(request: Request) {
     // Guardar en caché por 15 minutos (más tiempo para datos optimizados)
     // optimizedCache.set(cacheKey, rankings, 15 * 60, 'rankings');
     
-    await connection.end();
+    // 🚀 OPTIMIZACIÓN: Pool se gestiona automáticamente, no necesita .end()
     
     const totalTime = Date.now() - startTime;
     console.log(`🎉 Respuesta SUPER optimizada generada en ${totalTime}ms`);

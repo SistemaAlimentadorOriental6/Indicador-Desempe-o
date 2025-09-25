@@ -412,47 +412,6 @@ export const OperatorRankings: React.FC = () => {
         });
       }
       
-      // Aplicar lógica de categoría "Revisar" para todos los tipos de filtro
-      console.log('Aplicando lógica de categoría "Revisar"');
-      processedOperators = processedOperators.map(operator => {
-        // Criterio 1: No tiene deducciones en su bono (bono = 0 o no existe)
-        const hasNoBonus = !operator.bonus || operator.bonus.total === 0 || operator.bonus.percentage === 0;
-        
-        // Criterio 2: No registra kilómetros para el mes (no existe registro, no es 0)
-        const hasNoKmRecord = !operator.km || 
-                             (operator.km?.total_ejecutado === undefined && 
-                              operator.km?.total_programado === undefined && 
-                              operator.km?.total === undefined);
-        
-        // Criterio 3: Tiene valores por defecto que indican falta de datos reales
-        const hasDefaultValues = operator.km && (
-          (operator.km?.total === 142000) || 
-          (operator.km?.total_programado === 142000) || 
-          (operator.km?.total_ejecutado === 142000)
-        );
-        
-        // Si cumple alguno de los criterios, asignar a "Revisar"
-        if (hasNoBonus || hasNoKmRecord || hasDefaultValues) {
-          console.log(`Operador ${operator.name} asignado a "Revisar":`, {
-            hasNoBonus,
-            hasNoKmRecord,
-            hasDefaultValues,
-            bonus: operator.bonus,
-            km: operator.km
-          });
-          
-          // Modificar directamente las propiedades para evitar problemas de tipos
-          (operator as any).category = "Revisar";
-          if (operator.km) {
-            (operator.km as any).category = "Revisar";
-          }
-          if (operator.bonus) {
-            (operator.bonus as any).category = "Revisar";
-          }
-        }
-        
-        return operator;
-      });
       
       // Actualizar el estado con los operadores procesados
       setOperators(processedOperators);

@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import Image from "next/image"
-import { Eye, EyeOff, User, Lock, CheckCircle, ArrowRight, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, User, Lock, CheckCircle, ArrowRight, AlertCircle, Sparkles } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
 import Cookies from "js-cookie"
 import { useRouter } from "next/navigation"
@@ -68,7 +68,7 @@ const LoadingOverlay = () => (
           damping: 10,
         },
       }}
-      className="bg-white/20 backdrop-blur-md rounded-xl p-12 shadow-2xl"
+      className="bg-white/90 backdrop-blur-md rounded-xl p-12 shadow-2xl border border-green-200"
     >
       <div className="flex flex-col items-center gap-4">
         <div className="relative w-12 h-12">
@@ -77,10 +77,10 @@ const LoadingOverlay = () => (
               rotate: 360,
               transition: { duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "linear" },
             }}
-            className="w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full"
+            className="w-12 h-12 border-4 border-green-100 border-t-green-500 rounded-full"
           />
         </div>
-        <p className="text-white font-medium">Procesando...</p>
+        <p className="text-green-700 font-medium">Procesando...</p>
       </div>
     </motion.div>
   </motion.div>
@@ -101,14 +101,14 @@ const ErrorModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 50, opacity: 0 }}
           transition={{ type: "spring", damping: 20 }}
-          className="bg-white rounded-lg p-6 shadow-2xl max-w-md w-full mx-4"
+          className="bg-white rounded-lg p-6 shadow-2xl max-w-md w-full mx-4 border border-green-200"
         >
           <div className="text-center">
-            <div className="w-16 h-16 bg-red-100 rounded-full mx-auto flex items-center justify-center mb-4">
-              <AlertCircle className="h-8 w-8 text-red-600" />
+            <div className="w-16 h-16 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-4">
+              <AlertCircle className="h-8 w-8 text-green-600" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Demasiados intentos fallidos</h3>
-            <p className="text-gray-600 mb-6">
+            <h3 className="text-lg font-semibold text-green-900 mb-2">Demasiados intentos fallidos</h3>
+            <p className="text-green-700 mb-6">
               Has excedido el número de intentos permitidos. Por favor, intenta nuevamente más tarde o contacta a
               soporte.
             </p>
@@ -132,7 +132,7 @@ const LoadingTransition = () => (
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
     transition={{ duration: 0.5 }}
-    className="fixed inset-0 bg-white flex items-center justify-center z-50"
+    className="fixed inset-0 bg-gradient-to-br from-green-50 to-white flex items-center justify-center z-50"
   >
     <div className="relative w-20 h-20 grid grid-cols-2 gap-2">
       {[0, 1, 2, 3].map((i) => (
@@ -146,7 +146,7 @@ const LoadingTransition = () => (
             delay: i * 0.2,
             ease: "easeInOut",
           }}
-          className="w-8 h-8 rounded-full bg-green-500"
+          className="w-8 h-8 rounded-full bg-green-600"
         />
       ))}
     </div>
@@ -167,24 +167,23 @@ const AUTH_COOKIE_NAME = "sao6_auth"
 const AUTH_COOKIE_EXPIRY = 14 // days
 
 export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
+  const [codigo, setCodigo] = useState("")
   const [cedula, setCedula] = useState("")
-  const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
   const [loginAttempts, setLoginAttempts] = useState(0)
   const [showErrorModal, setShowErrorModal] = useState(false)
-  const [formStep, setFormStep] = useState<"cedula" | "password">("cedula")
+  const [formStep, setFormStep] = useState<"codigo" | "cedula">("codigo")
   const [shake, setShake] = useState(false)
   const [rememberMe, setRememberMe] = useState(true)
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
+  const [codigoFocused, setCodigoFocused] = useState(false)
   const [cedulaFocused, setCedulaFocused] = useState(false)
-  const [passwordFocused, setPasswordFocused] = useState(false)
   const [showLoadingTransition, setShowLoadingTransition] = useState(false)
   const [checkingAutoLogin, setCheckingAutoLogin] = useState(true)
 
+  const codigoInputRef = useRef<HTMLInputElement>(null)
   const cedulaInputRef = useRef<HTMLInputElement>(null)
-  const passwordInputRef = useRef<HTMLInputElement>(null)
   const { login } = useAuth()
   const router = useRouter()
 
@@ -229,38 +228,53 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
 
   // Focus input when form step changes
   useEffect(() => {
-    if (formStep === "cedula" && cedulaInputRef.current) {
+    if (formStep === "codigo" && codigoInputRef.current) {
+      setTimeout(() => codigoInputRef.current?.focus(), 300)
+    } else if (formStep === "cedula" && cedulaInputRef.current) {
       setTimeout(() => cedulaInputRef.current?.focus(), 300)
-    } else if (formStep === "password" && passwordInputRef.current) {
-      setTimeout(() => passwordInputRef.current?.focus(), 300)
     }
   }, [formStep])
+
+  const validateCodigo = (codigo: string): boolean => {
+    return codigo.length > 0
+  }
 
   const validateCedula = (cedula: string): boolean => {
     return cedula.length > 0
   }
 
   const handleNextStep = () => {
-    if (!validateCedula(cedula)) {
-      setError("Por favor ingrese su cédula")
-      setShake(true)
-      setTimeout(() => setShake(false), 500)
-      return
+    if (formStep === "codigo") {
+      if (!validateCodigo(codigo)) {
+        setError("Por favor ingrese su código")
+        setShake(true)
+        setTimeout(() => setShake(false), 500)
+        return
+      }
+      setError("")
+      setFormStep("cedula")
     }
-    setError("")
-    setFormStep("password")
   }
 
-  const handleBackToCedula = () => {
-    setFormStep("cedula")
+  const handleBack = () => {
+    if (formStep === "cedula") {
+      setFormStep("codigo")
+    }
     setError("")
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (formStep === "cedula") {
+    if (formStep === "codigo") {
       handleNextStep()
+      return
+    }
+
+    if (!validateCedula(cedula)) {
+      setError("Por favor ingrese su cédula")
+      setShake(true)
+      setTimeout(() => setShake(false), 500)
       return
     }
 
@@ -269,12 +283,12 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
 
     try {
       // Check for admin credentials (for this demo, we'll use hardcoded credentials)
-      if (cedula === "admin" && password === "admin") {
+      if (codigo === "ADMIN" && cedula === "MarioValle") {
         // Create mock admin user data
         const adminUser = {
           codigo: "ADMIN001",
-          nombre: "Administrador del Sistema",
-          cedula: "admin",
+          nombre: "Mario Valle - Administrador del Sistema",
+          cedula: "MarioValle",
           rol: "Administrador",
           telefono: "+34 600 000 000",
           isAdmin: true, // Special flag for admin users
@@ -295,7 +309,7 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
             router.push("/admin")
           }, 1000)
         }, 1500)
-        
+
         return
       }
 
@@ -305,7 +319,7 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ cedula, password }),
+        body: JSON.stringify({ codigo, cedula }),
       })
 
       const data = await response.json()
@@ -330,10 +344,12 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
           // Show loading transition
           setShowLoadingTransition(true)
 
-          // If login is successful, call the onLoginSuccess callback with user data
           setTimeout(() => {
             login(data.user)
             onLoginSuccess(data.user)
+            if (data.user.isAdmin || data.user.rol === "Administrador") {
+              router.push("/admin")
+            }
           }, 1000)
         }, 1500)
       } else {
@@ -363,29 +379,28 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background decorative elements */}
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-white flex items-center justify-center p-4 relative overflow-hidden">
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <motion.div
           animate={{
             scale: [1, 1.1, 1],
             x: [0, 30, 0],
             y: [0, -50, 0],
-            opacity: [0.7, 0.8, 0.7],
+            opacity: [0.3, 0.4, 0.3],
           }}
           transition={{
             repeat: Number.POSITIVE_INFINITY,
             duration: 15,
             ease: "easeInOut",
           }}
-          className="absolute top-10 left-10 w-64 h-64 bg-green-200 rounded-full mix-blend-multiply filter blur-3xl opacity-70"
+          className="absolute top-10 left-10 w-64 h-64 bg-green-200/40 rounded-full mix-blend-multiply filter blur-3xl"
         />
         <motion.div
           animate={{
             scale: [1, 0.9, 1],
             x: [0, -30, 0],
             y: [0, 30, 0],
-            opacity: [0.7, 0.6, 0.7],
+            opacity: [0.2, 0.3, 0.2],
           }}
           transition={{
             repeat: Number.POSITIVE_INFINITY,
@@ -393,22 +408,7 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
             ease: "easeInOut",
             delay: 1,
           }}
-          className="absolute top-0 right-10 w-72 h-72 bg-green-300 rounded-full mix-blend-multiply filter blur-3xl opacity-70"
-        />
-        <motion.div
-          animate={{
-            scale: [1, 1.2, 1],
-            x: [0, 20, 0],
-            y: [0, 20, 0],
-            opacity: [0.7, 0.9, 0.7],
-          }}
-          transition={{
-            repeat: Number.POSITIVE_INFINITY,
-            duration: 20,
-            ease: "easeInOut",
-            delay: 2,
-          }}
-          className="absolute -bottom-8 left-20 w-72 h-72 bg-green-200 rounded-full mix-blend-multiply filter blur-3xl opacity-70"
+          className="absolute top-0 right-10 w-72 h-72 bg-green-300/30 rounded-full mix-blend-multiply filter blur-3xl"
         />
       </div>
 
@@ -416,27 +416,125 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ type: "spring", stiffness: 300, damping: 25 }}
-        className={`w-full max-w-md bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden relative z-10 ${shake ? "animate-shake" : ""}`}
+        className={`w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-green-200/50 overflow-hidden relative z-10 ${shake ? "animate-shake" : ""}`}
       >
-        {/* Login Form */}
         <div className="w-full p-8 md:p-10">
-          <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6">
-            <motion.div variants={itemVariants} className="flex justify-center mb-8">
+          <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-8">
+            <motion.div variants={itemVariants} className="flex flex-col items-center mb-8">
               <motion.div
-                whileHover={{ scale: 1.05 }}
+                whileHover={{ scale: 1.05, rotate: 5 }}
                 whileTap={{ scale: 0.95 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                className="relative w-32 h-32 flex items-center justify-center"
+                className="relative w-24 h-24 flex items-center justify-center mb-4 bg-gradient-to-br from-green-100 to-green-50 rounded-2xl"
               >
-                <Image src="/sao6-logo.png" alt="Logo SAO6" width={120} height={120} className="object-contain" />
+                <Image src="/sao6-logo.png" alt="Logo SAO6" width={80} height={80} className="object-contain" />
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 20, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+                  className="absolute -top-2 -right-2"
+                >
+                  <Sparkles className="w-6 h-6 text-green-500" />
+                </motion.div>
               </motion.div>
+
+              <motion.h1 variants={itemVariants} className="text-4xl font-black text-green-800 text-center font-sans">
+                Indicador de Desempeño
+              </motion.h1>
+              <motion.p variants={itemVariants} className="text-green-600 text-center mt-2 font-medium">
+                Bienvenido de vuelta
+              </motion.p>
             </motion.div>
 
-            <motion.h2 variants={itemVariants} className="text-3xl font-bold text-green-700 text-center">
-              Sistema SAO6
-            </motion.h2>
-
             <AnimatePresence mode="wait">
+              {formStep === "codigo" && (
+                <motion.form
+                  key="codigoStep"
+                  variants={formVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="space-y-6"
+                  onSubmit={handleSubmit}
+                >
+                  <div className="relative">
+                    <label
+                      htmlFor="codigo"
+                      className="text-green-800 flex items-center gap-2 text-sm font-semibold mb-3"
+                    >
+                      Código de Operador
+                    </label>
+                    <div className="relative">
+                      <div
+                        className={`absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl ${codigoFocused ? "bg-green-500" : "bg-green-100"} flex items-center justify-center transition-all duration-300`}
+                      >
+                        <User
+                          className={`${codigoFocused ? "text-white" : "text-green-600"} h-5 w-5 transition-colors duration-300`}
+                        />
+                      </div>
+                      <input
+                        ref={codigoInputRef}
+                        id="codigo"
+                        type="text"
+                        value={codigo}
+                        onChange={(e) => setCodigo(e.target.value)}
+                        onFocus={() => setCodigoFocused(true)}
+                        onBlur={() => setCodigoFocused(false)}
+                        className={`pl-16 pr-4 w-full border-0 ${codigoFocused ? "ring-2 ring-green-500" : "ring-1 ring-green-200"} rounded-2xl focus:outline-none text-base h-16 bg-white shadow-sm transition-all duration-300 font-medium placeholder:text-green-400`}
+                        placeholder="Ingrese su código"
+                        required
+                        autoFocus
+                      />
+                      {codigo && (
+                        <motion.div
+                          initial={{ scale: 0, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          className="absolute right-4 top-1/2 -translate-y-1/2"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                            <CheckCircle className="text-green-500 h-5 w-5" />
+                          </div>
+                        </motion.div>
+                      )}
+                    </div>
+                  </div>
+
+                  <motion.div
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    <button
+                      type="submit"
+                      className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-4 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl h-16 flex items-center justify-center gap-3 text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={isLoading || !codigo}
+                    >
+                      {isLoading ? (
+                        <div className="flex items-center justify-center gap-3">
+                          <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                          Procesando...
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-3">
+                          Continuar
+                          <ArrowRight className="h-5 w-5" />
+                        </div>
+                      )}
+                    </button>
+                  </motion.div>
+
+                  {error && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm flex items-center gap-3"
+                    >
+                      <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                      <p className="font-medium">{error}</p>
+                    </motion.div>
+                  )}
+                </motion.form>
+              )}
+
               {formStep === "cedula" && (
                 <motion.form
                   key="cedulaStep"
@@ -450,16 +548,16 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
                   <div className="relative">
                     <label
                       htmlFor="cedula"
-                      className="text-green-700 flex items-center gap-2 text-base font-medium mb-2"
+                      className="text-green-800 flex items-center gap-2 text-sm font-semibold mb-3"
                     >
-                      Cédula
+                      Cédula de Identidad
                     </label>
                     <div className="relative">
                       <div
-                        className={`absolute left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full ${cedulaFocused ? "bg-green-500" : "bg-green-100"} flex items-center justify-center transition-colors duration-200`}
+                        className={`absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl ${cedulaFocused ? "bg-green-500" : "bg-green-100"} flex items-center justify-center transition-all duration-300`}
                       >
                         <User
-                          className={`${cedulaFocused ? "text-white" : "text-green-600"} h-3.5 w-3.5 transition-colors duration-200`}
+                          className={`${cedulaFocused ? "text-white" : "text-green-600"} h-5 w-5 transition-colors duration-300`}
                         />
                       </div>
                       <input
@@ -470,40 +568,46 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
                         onChange={(e) => setCedula(e.target.value)}
                         onFocus={() => setCedulaFocused(true)}
                         onBlur={() => setCedulaFocused(false)}
-                        className={`pl-12 w-full border-0 ${cedulaFocused ? "ring-2 ring-green-500" : "ring-1 ring-green-200"} rounded-xl focus:outline-none text-lg h-14 bg-white shadow-sm transition-all duration-200`}
-                        placeholder="Ingrese su cédula"
+                        className={`pl-16 pr-4 w-full border-0 ${cedulaFocused ? "ring-2 ring-green-500" : "ring-1 ring-green-200"} rounded-2xl focus:outline-none text-base h-16 bg-white shadow-sm transition-all duration-300 font-medium placeholder:text-green-400`}
+                        placeholder="Ingrese su número de cédula"
                         required
                         autoFocus
                       />
                       {cedula && (
                         <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          className="absolute right-3 top-1/2 -translate-y-1/2"
+                          initial={{ scale: 0, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          className="absolute right-4 top-1/2 -translate-y-1/2"
                         >
-                          <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
-                            <CheckCircle className="text-green-600 h-3.5 w-3.5" />
+                          <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                            <CheckCircle className="text-green-500 h-5 w-5" />
                           </div>
                         </motion.div>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-2">
-                    <input
-                      id="rememberMe"
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="h-4 w-4 text-green-600 border-green-300 rounded focus:ring-green-500"
-                    />
-                    <label
-                      htmlFor="rememberMe"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-green-700"
+                  <motion.div
+                    variants={itemVariants}
+                    className="bg-green-50 p-4 rounded-2xl flex items-center justify-between border border-green-200"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                        <User className="text-green-600 h-5 w-5" />
+                      </div>
+                      <div>
+                        <span className="font-semibold text-green-800 text-sm">Código: </span>
+                        <span className="font-mono text-green-600 font-bold">{codigo}</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-white hover:text-white text-sm px-4 py-2 rounded-xl bg-green-500 hover:bg-green-600 font-semibold transition-all duration-200"
+                      onClick={handleBack}
                     >
-                      Recordar mi cédula e iniciar automáticamente
-                    </label>
-                  </div>
+                      Cambiar
+                    </button>
+                  </motion.div>
 
                   <motion.div
                     initial={{ y: 20, opacity: 0 }}
@@ -512,127 +616,8 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
                   >
                     <button
                       type="submit"
-                      className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl h-14 flex items-center justify-center gap-2 text-lg"
+                      className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-4 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl flex items-center justify-center gap-3 h-16 text-base disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled={isLoading || !cedula}
-                    >
-                      {isLoading ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
-                          Procesando...
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-2">
-                          Continuar
-                          <ArrowRight className="h-5 w-5" />
-                        </div>
-                      )}
-                    </button>
-                  </motion.div>
-
-                  {error && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2"
-                    >
-                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                      <p>{error}</p>
-                    </motion.div>
-                  )}
-                </motion.form>
-              )}
-
-              {formStep === "password" && (
-                <motion.form
-                  key="passwordStep"
-                  variants={formVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="exit"
-                  className="space-y-6"
-                  onSubmit={handleSubmit}
-                >
-                  <motion.div
-                    variants={itemVariants}
-                    className="bg-green-50 p-4 rounded-xl flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                        <User className="text-green-600 h-4 w-4" />
-                      </div>
-                      <div>
-                        <span className="font-medium text-green-700">Cédula: </span>
-                        <span className="font-mono text-green-800">{cedula}</span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="text-green-600 hover:text-green-800 hover:bg-green-100 text-xs px-3 py-1.5 rounded-lg font-medium"
-                      onClick={handleBackToCedula}
-                    >
-                      Cambiar
-                    </button>
-                  </motion.div>
-
-                  <motion.div variants={itemVariants} className="relative">
-                    <label
-                      htmlFor="password"
-                      className="text-green-700 flex items-center gap-2 text-base font-medium mb-2"
-                    >
-                      Contraseña
-                    </label>
-                    <div className="relative">
-                      <div
-                        className={`absolute left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full ${passwordFocused ? "bg-green-500" : "bg-green-100"} flex items-center justify-center transition-colors duration-200`}
-                      >
-                        <Lock
-                          className={`${passwordFocused ? "text-white" : "text-green-600"} h-3.5 w-3.5 transition-colors duration-200`}
-                        />
-                      </div>
-                      <input
-                        ref={passwordInputRef}
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        onFocus={() => setPasswordFocused(true)}
-                        onBlur={() => setPasswordFocused(false)}
-                        className={`pl-12 pr-12 w-full border-0 ${passwordFocused ? "ring-2 ring-green-500" : "ring-1 ring-green-200"} rounded-xl focus:outline-none text-lg h-14 bg-white shadow-sm transition-all duration-200`}
-                        placeholder="••••••••"
-                        required
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 hover:bg-green-200"
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </motion.div>
-
-                  <motion.div variants={itemVariants} className="flex items-center space-x-2">
-                    <input
-                      id="rememberMe"
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="h-4 w-4 text-green-600 border-green-300 rounded focus:ring-green-500"
-                    />
-                    <label
-                      htmlFor="rememberMe"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-green-700"
-                    >
-                      Recordar mi cédula e iniciar automáticamente
-                    </label>
-                  </motion.div>
-
-                  <motion.div variants={itemVariants}>
-                    <button
-                      type="submit"
-                      className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl flex items-center justify-center gap-2 h-14 text-lg"
-                      disabled={isLoading || !password}
                     >
                       {isLoading ? (
                         <>
@@ -641,19 +626,10 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
                         </>
                       ) : (
                         <>
-                          <User className="h-5 w-5" />
+                          <Lock className="h-5 w-5" />
                           Iniciar Sesión
                         </>
                       )}
-                    </button>
-                  </motion.div>
-
-                  <motion.div variants={itemVariants} className="text-center">
-                    <button
-                      type="button"
-                      className="text-green-600 hover:text-green-800 text-sm underline underline-offset-2"
-                    >
-                      ¿Olvidaste tu contraseña?
                     </button>
                   </motion.div>
 
@@ -661,14 +637,15 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
                     <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2"
+                      className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm flex items-center gap-3"
                     >
-                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                      <p>{error}</p>
+                      <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                      <p className="font-medium">{error}</p>
                     </motion.div>
                   )}
                 </motion.form>
               )}
+
             </AnimatePresence>
           </motion.div>
         </div>
@@ -677,24 +654,23 @@ export default function ModernLoginForm({ onLoginSuccess }: LoginFormProps) {
       {isLoading && <LoadingOverlay />}
       <ErrorModal isOpen={showErrorModal} onClose={() => setShowErrorModal(false)} />
 
-      {/* Success Animation */}
       <AnimatePresence>
         {showSuccessAnimation && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-green-900/30 backdrop-blur-sm flex items-center justify-center z-50"
+            className="fixed inset-0 bg-green-500/20 backdrop-blur-sm flex items-center justify-center z-50"
           >
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: "spring", damping: 15 }}
-              className="bg-white rounded-full p-8 shadow-2xl"
+              className="bg-white rounded-3xl p-12 shadow-2xl border border-green-200"
             >
               <motion.div className="w-24 h-24 relative">
                 <svg
-                  className="w-24 h-24 text-green-600"
+                  className="w-24 h-24 text-green-500"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"

@@ -103,30 +103,6 @@ export const getRankTextColor = (rank: number) => {
   return "text-gray-400"
 }
 
-/**
- * Determina si un operador debe ir a la categoría "Revisar"
- * @param operator Operador a evaluar
- * @returns true si debe ir a "Revisar", false en caso contrario
- */
-function shouldGoToRevisar(operator: Operator): boolean {
-  // Criterio 1: No tiene deducciones en su bono (bono = 0 o no existe)
-  const hasNoBonus = !operator.bonus || operator.bonus.total === 0 || operator.bonus.percentage === 0;
-  
-  // Criterio 2: No registra kilómetros para el mes (no existe registro, no es 0)
-  const hasNoKmRecord = !operator.km || 
-                       (operator.km.total_ejecutado === undefined && 
-                        operator.km.total_programado === undefined && 
-                        operator.km.total === undefined);
-  
-  // Criterio 3: Tiene valores por defecto que indican falta de datos reales
-  const hasDefaultValues = operator.km && (
-    (operator.km.total === 142000) || 
-    (operator.km.total_programado === 142000) || 
-    (operator.km.total_ejecutado === 142000)
-  );
-  
-  return hasNoBonus || hasNoKmRecord || !!hasDefaultValues;
-}
 
 /**
  * Procesa los datos de operadores según el tipo de filtro, sumando los datos de kilómetros
@@ -175,23 +151,6 @@ export function processOperatorsData(operators: Operator[], filterType: TimeFilt
     const eficienciaPonderada = (newPercentage * pesoPorcentaje) + (kmNormalizados * pesoKilometros);
     const eficienciaRedondeada = Math.round(eficienciaPonderada * 10) / 10; // Redondear a 1 decimal
     
-    // Verificar si debe ir a "Revisar" antes de determinar la categoría normal
-    if (shouldGoToRevisar(operator)) {
-      return {
-        ...operator,
-        km: {
-          percentage: newPercentage,
-          total: operator.km?.total || 0,
-          total_programado: operator.km?.total_programado || 0,
-          total_ejecutado: operator.km?.total_ejecutado || 0,
-          category: "Revisar",
-          trend: operator.km?.trend || "stable",
-          date: operator.km?.date || null
-        },
-        efficiency: eficienciaRedondeada,
-        category: "Revisar"
-      };
-    }
     
     // Determinar la categoría basada en la eficiencia ponderada
     let categoria: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia";
@@ -233,7 +192,6 @@ export const calculateCategoryStats = (operators: Operator[]): CategoryStats => 
     Bronce: operators.filter((op) => op.category === "Bronce").length,
     Mejorar: operators.filter((op) => op.category === "Mejorar").length,
     "Taller Conciencia": operators.filter((op) => op.category === "Taller Conciencia").length,
-    "Revisar": operators.filter((op) => op.category === "Revisar").length,
   }
 }
 

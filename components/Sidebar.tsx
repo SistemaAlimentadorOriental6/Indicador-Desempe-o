@@ -1,4 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useAuth } from '@/hooks/use-auth';
+import { useRouter } from 'next/navigation';
+import LogoutConfirmation from './dashboard/logout-confirmation';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -8,6 +11,26 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onViewChange }) => {
+  const { logout } = useAuth();
+  const router = useRouter();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  const handleLogout = () => {
+    // Clear user session
+    logout();
+    
+    // Clear localStorage
+    localStorage.clear();
+    
+    // Clear sessionStorage
+    sessionStorage.clear();
+    
+    // Close modal
+    setShowLogoutModal(false);
+    
+    // Redirect to login page
+    window.location.href = '/';
+  };
   const menuItems = [
     { 
       id: 'rankings', 
@@ -192,6 +215,17 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
                   <span className="text-xs text-green-600 font-semibold">En línea</span>
                 </div>
               </div>
+              
+              {/* Logout Button */}
+              <button
+                onClick={() => setShowLogoutModal(true)}
+                className="ml-2 p-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 transition-all duration-200 hover:scale-110 group border border-red-100/50"
+                title="Cerrar Sesión"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
             </div>
             
             {/* Bottom Accent Line */}
@@ -199,6 +233,13 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
           </div>
         </div>
       )}
+      
+      {/* Logout Modal */}
+      <LogoutConfirmation 
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+      />
     </div>
   );
 };

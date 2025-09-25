@@ -101,21 +101,6 @@ export const CATEGORY_SYSTEM = {
     glowColor: "red-500",
     particleColor: "red-400",
   },
-  Revisar: {
-    icon: Search,
-    secondaryIcon: Eye,
-    emoji: "🔍",
-    label: "Revisar",
-    shortLabel: "REV",
-    description: "Pendiente de evaluación",
-    priority: 6,
-    tier: "pending",
-    achievement: "En evaluación",
-    minScore: 0,
-    gradient: "from-purple-400 via-violet-500 to-indigo-600",
-    glowColor: "purple-500",
-    particleColor: "purple-400",
-  },
 } as const
 
 // ============================================================================
@@ -321,18 +306,6 @@ export const getAdvancedCategoryColors = (category: string) => {
         accentColor: "text-red-600",
         mutedText: "text-red-700",
         glowColor: "shadow-red-300/60",
-      }
-    case "Revisar":
-      return {
-        gradient: `bg-gradient-to-r ${config.gradient}`,
-        iconColor: "text-purple-600",
-        badgeBackground: "bg-gradient-to-r from-purple-50 to-violet-50",
-        badgeText: "text-purple-900",
-        badgeBorder: "border-purple-300",
-        hoverBackground: "hover:from-purple-100 hover:to-violet-100",
-        accentColor: "text-purple-600",
-        mutedText: "text-purple-700",
-        glowColor: "shadow-purple-300/60",
       }
     default:
       return {
@@ -584,7 +557,7 @@ export const calculateAdvancedStats = (operators: Operator[]) => {
       config: CATEGORY_SYSTEM[category as keyof typeof CATEGORY_SYSTEM],
     })),
     topPerformers: operators.filter((op) => ["Oro", "Plata", "Bronce"].includes(op.category)).length,
-    needsAttention: operators.filter((op) => ["Taller Conciencia", "Revisar", "Mejorar"].includes(op.category)).length,
+    needsAttention: operators.filter((op) => ["Taller Conciencia", "Mejorar"].includes(op.category)).length,
     averageRank: total > 0 ? Math.round(operators.reduce((sum, op) => sum + (op.rank || 0), 0) / total) : 0,
   }
 }
@@ -639,7 +612,6 @@ export const calculateCategoryStats = (operators: Operator[]): CategoryStats => 
       Bronce: 0,
       Mejorar: 0,
       "Taller Conciencia": 0,
-      Revisar: 0,
     }
   }
 
@@ -649,7 +621,6 @@ export const calculateCategoryStats = (operators: Operator[]): CategoryStats => 
     Bronce: operators.filter((op) => op.category === "Bronce").length,
     Mejorar: operators.filter((op) => op.category === "Mejorar").length,
     "Taller Conciencia": operators.filter((op) => op.category === "Taller Conciencia").length,
-    Revisar: operators.filter((op) => op.category === "Revisar").length,
   }
 }
 

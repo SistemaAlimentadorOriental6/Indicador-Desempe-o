@@ -11,23 +11,24 @@ const dbConfig = {
 
 export async function POST(request: Request) {
   try {
-    const { cedula, password } = await request.json()
+    const { codigo, cedula } = await request.json()
 
     // Validate input
-    if (!cedula || !password) {
-      return NextResponse.json({ message: "Cédula y contraseña son requeridos" }, { status: 400 })
+    if (!codigo || !cedula) {
+      return NextResponse.json({ message: "Código y cédula son requeridos" }, { status: 400 })
     }
 
     // Check for admin credentials
-    if (cedula === "admin" && password === "admin") {
+    if (codigo === "ADMIN" && cedula === "MarioValle") {
       return NextResponse.json({
         message: "Inicio de sesión exitoso",
         user: {
-          codigo: "ADMIN",
-          nombre: "Administrador",
-          cedula: "admin",
+          codigo: "ADMIN001",
+          nombre: "Mario Valle - Administrador del Sistema",
+          cedula: "MarioValle",
           rol: "Administrador",
-          telefono: "",
+          telefono: "+34 600 000 000",
+          isAdmin: true,
         },
       })
     }
@@ -36,28 +37,22 @@ export async function POST(request: Request) {
     const connection = await createConnection(dbConfig)
 
     try {
-      // Query to find the user by cedula
+      // Query to find the user by both codigo and cedula
       const [rows] = await connection.execute(
-        "SELECT codigo, nombre, cedula, rol, telefono FROM operadores_sao6 WHERE cedula = ?",
-        [cedula],
+        "SELECT codigo, nombre, cedula, rol, telefono FROM operadores_sao6 WHERE codigo = ? AND cedula = ?",
+        [codigo, cedula],
       )
 
       // Close the database connection
       await connection.end()
 
-      // Check if user exists
+      // Check if user exists with matching codigo and cedula
       const users = rows as any[]
       if (users.length === 0) {
-        return NextResponse.json({ message: "Usuario no encontrado" }, { status: 404 })
+        return NextResponse.json({ message: "Código o cédula incorrectos" }, { status: 401 })
       }
 
       const user = users[0]
-
-      // In this implementation, we're checking if the password matches the cedula
-      // In a real application, you should use proper password hashing
-      if (password !== cedula.toString()) {
-        return NextResponse.json({ message: "Contraseña incorrecta" }, { status: 401 })
-      }
 
       // Return user data on successful login
       return NextResponse.json({

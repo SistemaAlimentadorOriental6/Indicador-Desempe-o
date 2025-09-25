@@ -8,6 +8,7 @@ interface User {
   cedula: string
   rol: string
   telefono: string
+  isAdmin?: boolean
 }
 
 interface AuthContextType {

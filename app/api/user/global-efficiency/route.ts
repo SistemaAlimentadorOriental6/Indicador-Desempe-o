@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mysql from 'mysql2/promise';
 import { DEDUCTION_RULES } from '@/lib/deductions-config';
+import { getDatabase } from '@/lib/database';
 
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
@@ -24,21 +25,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, message: 'El año es requerido' }, { status: 400 });
   }
 
-  let connection;
   try {
-    console.log(`[Global Efficiency] Conectando a la base de datos...`);
-    connection = await mysql.createConnection(dbConfig);
-    console.log(`[Global Efficiency] Conexión exitosa`);
+    // 🚀 OPTIMIZACIÓN: Usar pool compartido en lugar de conexión individual
+    const db = getDatabase();
+    console.log(`[Global Efficiency] Usando pool compartido de MySQL (eliminando conexión individual)`);
     
     // 1. Obtener el último mes disponible en kilómetros para este usuario y año
     console.log(`[Global Efficiency] Buscando último mes en kilómetros...`);
-    const [lastMonthRows]: [any[], any] = await connection.execute(
+    // 🚀 OPTIMIZACIÓN: Usar pool compartido con cache para consulta de último mes
+    const lastMonthRows = await db.executeRankingsQuery<Array<{last_month: number}>>(
       `SELECT MAX(MONTH(fecha_inicio_programacion)) as last_month
        FROM variables_control
        WHERE codigo_empleado = ? 
          AND YEAR(fecha_inicio_programacion) = ?
          AND (codigo_variable LIKE 'km%' OR codigo_variable LIKE 'kilometr%')`,
-      [userCode, year]
+      [userCode, year],
+      true // Habilitar cache para esta consulta común
     );
 
     const lastMonth = lastMonthRows[0]?.last_month || 12; // Si no hay datos, usar diciembre
@@ -46,7 +48,8 @@ export async function GET(req: NextRequest) {
 
     // 2. Obtener datos de kilómetros por mes
     console.log(`[Global Efficiency] Obteniendo datos de kilómetros...`);
-    const [kmRows]: [any[], any] = await connection.execute(
+    // 🚀 OPTIMIZACIÓN: Usar pool compartido con cache para consulta de kilómetros
+    const kmRows = await db.executeRankingsQuery(
       `SELECT 
         MONTH(fecha_inicio_programacion) as month,
         SUM(valor_ejecucion) as total_ejecutado,
@@ -57,7 +60,8 @@ export async function GET(req: NextRequest) {
         AND (codigo_variable LIKE 'km%' OR codigo_variable LIKE 'kilometr%')
       GROUP BY MONTH(fecha_inicio_programacion)
       ORDER BY month`,
-      [userCode, year]
+      [userCode, year],
+      true // Habilitar cache para esta consulta común
     );
 
     console.log(`[Global Efficiency] Datos de kilómetros obtenidos: ${kmRows.length} registros`);
@@ -121,7 +125,8 @@ export async function GET(req: NextRequest) {
     for (const month of monthsWithKmData) {
       try {
         // Obtener todas las novedades que afectan este mes específico (incluye períodos que se extienden)
-        const [novedadRows]: [any[], any] = await connection.execute(
+        // 🚀 OPTIMIZACIÓN: Usar pool compartido con cache para consulta de novedades
+        const novedadRows = await db.executeBonusQuery(
           `SELECT 
             codigo_factor,
             observaciones,
@@ -140,7 +145,8 @@ export async function GET(req: NextRequest) {
             year, month,
             `${year}-${String(month).padStart(2, '0')}-31`,
             `${year}-${String(month).padStart(2, '0')}-01`
-          ]
+          ],
+          true // Habilitar cache para esta consulta común
         );
 
         let monthDeductions = 0;
@@ -229,14 +235,7 @@ export async function GET(req: NextRequest) {
     console.error('[Global Efficiency] Error completo:', error);
     console.error('[Global Efficiency] Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
     
-    if (connection) {
-      try {
-        await connection.end();
-        console.log('[Global Efficiency] Conexión cerrada correctamente');
-      } catch (closeError) {
-        console.error('[Global Efficiency] Error cerrando conexión:', closeError);
-      }
-    }
+    // 🚀 OPTIMIZACIÓN: Pool se gestiona automáticamente, no necesita .end()
     
     return NextResponse.json({ 
       success: false, 

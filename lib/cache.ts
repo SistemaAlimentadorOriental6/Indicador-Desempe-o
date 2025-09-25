@@ -1,4 +1,6 @@
-// Sistema de caché optimizado sin dependencias externas
+// Sistema de caché híbrido: Redis + fallback en memoria
+import RedisCache, { CACHE_TTL } from './redis-cache';
+
 interface CacheEntry {
   data: any;
   timestamp: number;
@@ -6,31 +8,31 @@ interface CacheEntry {
   compressed: boolean;
 }
 
-// Configuraciones específicas por tipo de datos
-const CACHE_CONFIGS = {
-  rankings: {
-    ttl: 1000 * 60 * 10, // 10 minutos para rankings
+// Configuración de caché con TTLs ajustados para Redis (en segundos)
+const cacheConfigs = {
+  default: {
+    ttl: CACHE_TTL.SHORT, // 15 minutos por defecto
     compress: true
   },
   users: {
-    ttl: 1000 * 60 * 30, // 30 minutos para usuarios
+    ttl: CACHE_TTL.WEEKLY, // 7 días para usuarios (como solicitado)
     compress: false
   },
   statistics: {
-    ttl: 1000 * 60 * 5, // 5 minutos para estadísticas
+    ttl: CACHE_TTL.SHORT, // 15 minutos para estadísticas
     compress: true
   },
   bonuses: {
-    ttl: 1000 * 60 * 15, // 15 minutos para bonos
+    ttl: CACHE_TTL.WEEKLY, // 7 días para bonos (como solicitado)
     compress: true
   },
   kilometers: {
-    ttl: 1000 * 60 * 15, // 15 minutos para kilómetros
+    ttl: CACHE_TTL.WEEKLY, // 7 días para kilómetros (como solicitado)
     compress: true
   }
 };
 
-// Función para comprimir datos grandes
+// Función para comprimir datos grandes (mantenida para compatibilidad)
 function compressData(data: any): string {
   try {
     return JSON.stringify(data);
@@ -62,7 +64,7 @@ function generateCacheKey(prefix: string, params: Record<string, any>): string {
 
 // Función para obtener configuración específica
 function getConfigForType(type: string) {
-  return CACHE_CONFIGS[type as keyof typeof CACHE_CONFIGS] || CACHE_CONFIGS.rankings;
+  return cacheConfigs[type as keyof typeof cacheConfigs] || cacheConfigs.default;
 }
 
 // Clase de caché optimizado nativo
