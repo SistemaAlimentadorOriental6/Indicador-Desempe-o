@@ -152,10 +152,11 @@ export async function GET(req: NextRequest) {
         let monthDeductions = 0;
         
         // Procesar cada novedad usando las reglas de deducción
+        // Solo considerar deducciones que afectan el desempeño (igual que Excel)
         if (novedadRows && novedadRows.length > 0) {
           novedadRows.forEach((novedad: any) => {
             const rule = factorMap.get(novedad.codigo_factor);
-            if (rule) {
+            if (rule && rule.afectaDesempeno) {
               let deductionAmount = 0;
               let days = 1;
               
@@ -208,13 +209,96 @@ export async function GET(req: NextRequest) {
     const bonusPercentage = totalBonusProgrammed > 0 ? Number(((totalBonusExecuted / totalBonusProgrammed) * 100).toFixed(2)) : 0;
     console.log(`[Global Efficiency] Total Bonus: ${totalBonusExecuted.toFixed(2)} / ${totalBonusProgrammed.toFixed(2)} = ${bonusPercentage.toFixed(2)}%`);
 
-    // 5. Calcular eficiencia global como promedio de bonos y kilómetros
-    const efficiency = Number(((bonusPercentage + kmPercentage) / 2).toFixed(2));
+    // 5. Calcular eficiencia global como promedio de eficiencias mensuales (igual que Excel)
+    // Primero necesitamos calcular la eficiencia mensual para cada mes con datos
+    let totalMonthlyEfficiency = 0;
+    let validMonthsForEfficiency = 0;
+    
+    // Recalcular bonos por mes para obtener porcentajes mensuales
+    const monthlyEfficiencies: Record<number, number> = {};
+    
+    for (const month of monthsWithKmData) {
+      const kmData = kmDataByMonth[month];
+      if (!kmData) continue;
+      
+      try {
+        // Obtener deducciones para este mes específico
+        const novedadRows = await db.executeBonusQuery(
+          `SELECT 
+            codigo_factor,
+            observaciones,
+            fecha_inicio_novedad,
+            fecha_fin_novedad
+          FROM novedades
+          WHERE codigo_empleado = ? 
+            AND (
+              (YEAR(fecha_inicio_novedad) = ? AND MONTH(fecha_inicio_novedad) = ?) OR
+              (YEAR(IFNULL(fecha_fin_novedad, CURDATE())) = ? AND MONTH(IFNULL(fecha_fin_novedad, CURDATE())) = ?) OR
+              (fecha_inicio_novedad <= ? AND (fecha_fin_novedad >= ? OR fecha_fin_novedad IS NULL))
+            )`,
+          [
+            userCode,
+            year, month,
+            year, month,
+            `${year}-${String(month).padStart(2, '0')}-31`,
+            `${year}-${String(month).padStart(2, '0')}-01`
+          ],
+          true
+        );
+
+        let monthDeductions = 0;
+        
+        if (novedadRows && novedadRows.length > 0) {
+          novedadRows.forEach((novedad: any) => {
+            const rule = factorMap.get(novedad.codigo_factor);
+            // Solo considerar deducciones que afectan el desempeño (igual que Excel)
+            if (rule && rule.afectaDesempeno) {
+              let deductionAmount = 0;
+              let days = 1;
+              
+              if (novedad.fecha_inicio_novedad && novedad.fecha_fin_novedad) {
+                const startDate = new Date(novedad.fecha_inicio_novedad);
+                const endDate = new Date(novedad.fecha_fin_novedad);
+                days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+              }
+              
+              if (rule.porcentajeRetirar === 'Día') {
+                deductionAmount = rule.valorActual * days;
+              } else if (typeof rule.porcentajeRetirar === 'number') {
+                deductionAmount = baseBonus * rule.porcentajeRetirar;
+              }
+              
+              monthDeductions += deductionAmount;
+              console.log(`[Global Efficiency] Mes ${month}: Aplicando deducción ${rule.causa} (${novedad.codigo_factor}): $${deductionAmount.toFixed(0)}`);
+            } else if (rule && !rule.afectaDesempeno) {
+              console.log(`[Global Efficiency] Mes ${month}: Ignorando deducción ${rule.causa} (${novedad.codigo_factor}) - No afecta desempeño`);
+            }
+          });
+        }
+
+        const monthBonus = Math.max(0, baseBonus - monthDeductions);
+        const monthBonusPercentage = (monthBonus / baseBonus) * 100;
+        
+        // Calcular eficiencia mensual como promedio de KM y Bonos del mes
+        const monthlyEfficiency = (kmData.percentage + monthBonusPercentage) / 2;
+        monthlyEfficiencies[month] = monthlyEfficiency;
+        totalMonthlyEfficiency += monthlyEfficiency;
+        validMonthsForEfficiency++;
+        
+        console.log(`[Global Efficiency] Mes ${month}: KM ${kmData.percentage.toFixed(1)}%, Bono ${monthBonusPercentage.toFixed(1)}%, Eficiencia ${monthlyEfficiency.toFixed(1)}%`);
+      } catch (monthError) {
+        console.error(`[Global Efficiency] Error calculando eficiencia para mes ${month}:`, monthError);
+      }
+    }
+    
+    // Calcular eficiencia global como promedio de eficiencias mensuales
+    const efficiency = validMonthsForEfficiency > 0 ? 
+      Number((totalMonthlyEfficiency / validMonthsForEfficiency).toFixed(2)) : 0;
 
     console.log(`[Global Efficiency] User: ${userCode}, Year: ${year}`);
-    console.log(`[Global Efficiency] Meses válidos KM: ${validKmMonths}, Meses válidos Bonos: ${validBonusMonths}`);
-    console.log(`[Global Efficiency] KM: ${kmPercentage.toFixed(2)}%, Bonus: ${bonusPercentage.toFixed(2)}%`);
-    console.log(`[Global Efficiency] Final Efficiency: ${efficiency.toFixed(2)}%`);
+    console.log(`[Global Efficiency] Meses válidos para eficiencia: ${validMonthsForEfficiency}`);
+    console.log(`[Global Efficiency] KM Total: ${kmPercentage.toFixed(2)}%, Bonus Total: ${bonusPercentage.toFixed(2)}%`);
+    console.log(`[Global Efficiency] Eficiencia Global (promedio mensual): ${efficiency.toFixed(2)}%`);
 
     const response = { 
       success: true, 

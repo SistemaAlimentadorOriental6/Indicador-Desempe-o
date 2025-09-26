@@ -227,9 +227,55 @@ export const fetchRealOperatorsData = async (
       };
     }
     
+    // Si el filtro es por año, obtener la eficiencia global correcta para cada operador
+    let finalOperatorsData = operatorsData;
+    if (filterType === 'year' && filterValue && operatorsData.length > 0) {
+      console.log(`Actualizando eficiencias globales para ${operatorsData.length} operadores del año ${filterValue}`);
+      
+      try {
+        // Obtener eficiencias globales para todos los operadores en paralelo
+        const efficiencyPromises = operatorsData.map(async (operator: any) => {
+          try {
+            const response = await fetch(`/api/user/global-efficiency?userCode=${operator.codigo}&year=${filterValue}`);
+            const result = await response.json();
+            
+            if (result.success && result.data && typeof result.data.efficiency === 'number') {
+              return {
+                ...operator,
+                efficiency: result.data.efficiency
+              };
+            } else {
+              console.warn(`No se pudo obtener eficiencia global para operador ${operator.codigo}:`, result.message);
+              return operator; // Mantener eficiencia original si falla
+            }
+          } catch (error) {
+            console.error(`Error obteniendo eficiencia global para operador ${operator.codigo}:`, error);
+            return operator; // Mantener eficiencia original si falla
+          }
+        });
+        
+        // Esperar a que todas las llamadas se completen
+        finalOperatorsData = await Promise.all(efficiencyPromises);
+        
+        // Reordenar por eficiencia actualizada
+        finalOperatorsData.sort((a: any, b: any) => (b.efficiency || 0) - (a.efficiency || 0));
+        
+        // Actualizar rankings
+        finalOperatorsData.forEach((operator: any, index: number) => {
+          operator.rank = index + 1;
+        });
+        
+        console.log(`Eficiencias globales actualizadas exitosamente para el año ${filterValue}`);
+      } catch (error) {
+        console.error('Error actualizando eficiencias globales:', error);
+        // Si falla, usar los datos originales
+        finalOperatorsData = operatorsData;
+      }
+    }
+
     // Si hay datos, los devolvemos junto con la información de filtro
     return { 
-      operators: operatorsData, 
+      operators: finalOperatorsData, 
       isUsingDemoData,
       message: data.message,
       error: isUsingDemoData ? (data.error || 'Usando datos de demostración') : undefined,
