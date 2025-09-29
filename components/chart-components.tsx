@@ -33,9 +33,10 @@ export const PerformanceTooltip = ({ active, payload, label }: any) => {
           <span className="text-green-600/80 text-sm">rendimiento</span>
         </div>
         <div className="mt-2 text-xs text-green-600/70">
-          {value >= 90 ? "Excelente desempeño" : 
-           value >= 75 ? "Buen desempeño" : 
-           value >= 60 ? "Desempeño regular" : "Necesita mejorar"}
+          {value >= 94 ? "Oro" : 
+           value >= 90 ? "Plata" : 
+           value >= 85 ? "Bronce" : 
+           value >= 60 ? "Mejorar" : "Taller Conciencia"}
         </div>
       </div>
     );
@@ -239,20 +240,23 @@ export const ThreeYearComparisonChart: React.FC<ThreeYearChartProps> = ({ data, 
                     {yearData.year}
                   </div>
                   <div className={`text-2xl font-extrabold mb-1 ${
-                    yearData.rendimiento >= 90 ? 'text-green-600' :
-                    yearData.rendimiento >= 75 ? 'text-green-500' :
+                    yearData.rendimiento >= 94 ? 'text-green-600' :
+                    yearData.rendimiento >= 90 ? 'text-green-500' :
+                    yearData.rendimiento >= 85 ? 'text-blue-500' :
                     yearData.rendimiento >= 60 ? 'text-yellow-600' : 'text-red-500'
                   }`}>
                     {yearData.rendimiento}%
                   </div>
                   <div className={`text-xs font-medium ${
-                    yearData.rendimiento >= 90 ? 'text-green-600' :
-                    yearData.rendimiento >= 75 ? 'text-green-500' :
+                    yearData.rendimiento >= 94 ? 'text-green-600' :
+                    yearData.rendimiento >= 90 ? 'text-green-500' :
+                    yearData.rendimiento >= 85 ? 'text-blue-500' :
                     yearData.rendimiento >= 60 ? 'text-yellow-600' : 'text-red-500'
                   }`}>
-                    {yearData.rendimiento >= 90 ? 'Excelente' :
-                     yearData.rendimiento >= 75 ? 'Bueno' :
-                     yearData.rendimiento >= 60 ? 'Regular' : 'Bajo'}
+                    {yearData.rendimiento >= 94 ? 'Oro' :
+                     yearData.rendimiento >= 90 ? 'Plata' :
+                     yearData.rendimiento >= 85 ? 'Bronce' :
+                     yearData.rendimiento >= 60 ? 'Mejorar' : 'Taller Conciencia'}
                   </div>
                 </div>
               </motion.div>
@@ -306,23 +310,26 @@ export const ThreeYearComparisonChart: React.FC<ThreeYearChartProps> = ({ data, 
                 )}
               </div>
               <div className={`text-5xl font-extrabold mb-3 ${
-                currentPerformance >= 90 ? 'text-green-600' :
-                currentPerformance >= 75 ? 'text-green-500' :
+                currentPerformance >= 94 ? 'text-green-600' :
+                currentPerformance >= 90 ? 'text-green-500' :
+                currentPerformance >= 85 ? 'text-blue-500' :
                 currentPerformance >= 60 ? 'text-yellow-600' : 
                 currentPerformance > 0 ? 'text-red-500' : 'text-gray-500'
               }`}>
                 {currentPerformance > 0 ? `${currentPerformance}%` : 'N/A'}
               </div>
               <div className={`text-sm font-bold mb-3 ${
-                currentPerformance >= 90 ? 'text-green-600' :
-                currentPerformance >= 75 ? 'text-green-500' :
+                currentPerformance >= 94 ? 'text-green-600' :
+                currentPerformance >= 90 ? 'text-green-500' :
+                currentPerformance >= 85 ? 'text-blue-500' :
                 currentPerformance >= 60 ? 'text-yellow-600' : 
                 currentPerformance > 0 ? 'text-red-500' : 'text-gray-500'
               }`}>
-                {currentPerformance >= 90 ? 'EXCELENTE' :
-                 currentPerformance >= 75 ? 'BUENO' :
-                 currentPerformance >= 60 ? 'REGULAR' : 
-                 currentPerformance > 0 ? 'BAJO' : 'INICIANDO AÑO'}
+                {currentPerformance >= 94 ? 'ORO' :
+                 currentPerformance >= 90 ? 'PLATA' :
+                 currentPerformance >= 85 ? 'BRONCE' :
+                 currentPerformance >= 60 ? 'MEJORAR' : 
+                 currentPerformance > 0 ? 'TALLER CONCIENCIA' : 'INICIANDO AÑO'}
                 {(currentYearData?.isEstimate || isEstimate) && (
                   <div className="text-xs text-yellow-600 mt-1">
                     Basado en tendencia
@@ -546,20 +553,23 @@ export const MonthlyPerformanceChart: React.FC<MonthlyChartProps> = ({ data, yea
               {monthData.hasData ? (
                 <>
                   <div className={`text-lg font-bold ${
-                    monthData.rendimiento >= 90 ? 'text-green-600' :
-                    monthData.rendimiento >= 75 ? 'text-green-500' :
+                    monthData.rendimiento >= 94 ? 'text-green-600' :
+                    monthData.rendimiento >= 90 ? 'text-green-500' :
+                    monthData.rendimiento >= 85 ? 'text-blue-500' :
                     monthData.rendimiento >= 60 ? 'text-yellow-600' : 'text-red-500'
                   }`}>
                     {monthData.rendimiento}%
                   </div>
                   <div className={`text-xs ${
-                    monthData.rendimiento >= 90 ? 'text-green-600' :
-                    monthData.rendimiento >= 75 ? 'text-green-500' :
+                    monthData.rendimiento >= 94 ? 'text-green-600' :
+                    monthData.rendimiento >= 90 ? 'text-green-500' :
+                    monthData.rendimiento >= 85 ? 'text-blue-500' :
                     monthData.rendimiento >= 60 ? 'text-yellow-600' : 'text-red-500'
                   }`}>
-                    {monthData.rendimiento >= 90 ? 'Excelente' :
-                     monthData.rendimiento >= 75 ? 'Bueno' :
-                     monthData.rendimiento >= 60 ? 'Regular' : 'Bajo'}
+                    {monthData.rendimiento >= 94 ? 'Oro' :
+                     monthData.rendimiento >= 90 ? 'Plata' :
+                     monthData.rendimiento >= 85 ? 'Bronce' :
+                     monthData.rendimiento >= 60 ? 'Mejorar' : 'Taller Conc.'}
                   </div>
                 </>
               ) : (
