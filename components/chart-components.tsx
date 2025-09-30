@@ -115,11 +115,14 @@ export const ThreeYearComparisonChart: React.FC<ThreeYearChartProps> = ({ data, 
     isEstimate: isEstimate
   }
 
-  // Combine all data for min/max calculations
-  const allPerformanceData = [...historicalData]
+  // Combine all data for the bar chart display - include ALL years (last 3 + current 2025)
+  const allYearsData = [...historicalData]
   if (currentPerformance > 0) {
-    allPerformanceData.push({ year: currentYear, rendimiento: currentPerformance })
+    allYearsData.push({ year: currentYear, rendimiento: currentPerformance })
   }
+  
+  // Also combine for min/max calculations
+  const allPerformanceData = [...allYearsData]
 
   const maxPerformance = allPerformanceData.length > 0 ? Math.max(...allPerformanceData.map(d => d.rendimiento)) : 0
   const minPerformance = allPerformanceData.length > 0 ? Math.min(...allPerformanceData.map(d => d.rendimiento)) : 0
@@ -150,7 +153,7 @@ export const ThreeYearComparisonChart: React.FC<ThreeYearChartProps> = ({ data, 
           </div>
           
           <ResponsiveContainer width="100%" height="75%">
-            <BarChart data={historicalData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+            <BarChart data={allYearsData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
               <defs>
                 <linearGradient id="performanceBarGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#34d399" />
