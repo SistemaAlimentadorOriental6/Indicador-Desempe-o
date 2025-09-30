@@ -123,7 +123,7 @@ export const ThreeYearComparisonChart: React.FC<ThreeYearChartProps> = ({ data, 
 
   const maxPerformance = allPerformanceData.length > 0 ? Math.max(...allPerformanceData.map(d => d.rendimiento)) : 0
   const minPerformance = allPerformanceData.length > 0 ? Math.min(...allPerformanceData.map(d => d.rendimiento)) : 0
-  const avgHistoricalPerformance = historicalData.length > 0 ? Math.round(historicalData.reduce((sum, d) => sum + d.rendimiento, 0) / historicalData.length) : 0
+  const avgHistoricalPerformance = historicalData.length > 0 ? Number((historicalData.reduce((sum, d) => sum + d.rendimiento, 0) / historicalData.length).toFixed(1)) : 0
 
   return (
     <motion.div 
@@ -245,7 +245,7 @@ export const ThreeYearComparisonChart: React.FC<ThreeYearChartProps> = ({ data, 
                     yearData.rendimiento >= 85 ? 'text-blue-500' :
                     yearData.rendimiento >= 60 ? 'text-yellow-600' : 'text-red-500'
                   }`}>
-                    {yearData.rendimiento}%
+                    {yearData.rendimiento.toFixed(1)}%
                   </div>
                   <div className={`text-xs font-medium ${
                     yearData.rendimiento >= 94 ? 'text-green-600' :
@@ -316,7 +316,7 @@ export const ThreeYearComparisonChart: React.FC<ThreeYearChartProps> = ({ data, 
                 currentPerformance >= 60 ? 'text-yellow-600' : 
                 currentPerformance > 0 ? 'text-red-500' : 'text-gray-500'
               }`}>
-                {currentPerformance > 0 ? `${currentPerformance}%` : 'N/A'}
+                {currentPerformance > 0 ? `${currentPerformance.toFixed(1)}%` : 'N/A'}
               </div>
               <div className={`text-sm font-bold mb-3 ${
                 currentPerformance >= 94 ? 'text-green-600' :
@@ -386,12 +386,12 @@ export const MonthlyPerformanceChart: React.FC<MonthlyChartProps> = ({ data, yea
       
       // Calculate KM efficiency
       if (monthData.valor_programacion && monthData.valor_programacion > 0) {
-        kmPercentage = Math.round((monthData.valor_ejecucion / monthData.valor_programacion) * 100)
+        kmPercentage = Number(((monthData.valor_ejecucion / monthData.valor_programacion) * 100).toFixed(1))
       }
       
       // PRIORITY 1: Calculate from finalBonus and baseBonus (most accurate)
       if (monthData.baseBonus && monthData.baseBonus > 0 && monthData.finalBonus !== undefined) {
-        bonusPercentage = Math.round((monthData.finalBonus / monthData.baseBonus) * 100)
+        bonusPercentage = Number(((monthData.finalBonus / monthData.baseBonus) * 100).toFixed(1))
         console.log(`[DEBUG] Month ${month}: Calculated from finalBonus(${monthData.finalBonus})/baseBonus(${monthData.baseBonus})=${bonusPercentage}%`)
       }
       // PRIORITY 2: Use porcentaje if available  
@@ -414,7 +414,7 @@ export const MonthlyPerformanceChart: React.FC<MonthlyChartProps> = ({ data, yea
       console.log(`[DEBUG] Month ${month} (${monthData.month}): kmPercentage=${kmPercentage}, bonusPercentage=${bonusPercentage}`)
       
       // Combined performance (average of both metrics)
-      performance = Math.round((kmPercentage + bonusPercentage) / 2)
+      performance = Number(((kmPercentage + bonusPercentage) / 2).toFixed(1))
       
       console.log(`[DEBUG] Month ${month} (${monthData.month}): Final performance=${performance}`)
     }
@@ -432,12 +432,12 @@ export const MonthlyPerformanceChart: React.FC<MonthlyChartProps> = ({ data, yea
   const currentMonth = new Date().getMonth() + 1
   const maxPerformance = Math.max(...monthlyData.filter(d => d.hasData).map(d => d.rendimiento))
   const minPerformance = Math.min(...monthlyData.filter(d => d.hasData).map(d => d.rendimiento))
-  const avgPerformance = Math.round(
+  const avgPerformance = Number((
     monthlyData
       .filter(d => d.hasData)
       .reduce((sum, d) => sum + d.rendimiento, 0) / 
     monthlyData.filter(d => d.hasData).length
-  )
+  ).toFixed(1))
 
   return (
     <motion.div 
@@ -517,7 +517,7 @@ export const MonthlyPerformanceChart: React.FC<MonthlyChartProps> = ({ data, yea
       >
         {monthlyData.filter(d => d.hasData).map((monthData, index) => {
           const isCurrentMonth = monthData.monthNumber === currentMonth
-          const isHighest = monthData.hasData && monthData.rendimiento === maxPerformance
+          const isHighest = monthData.hasData && monthData.rendimiento === Math.max(...monthlyData.filter(d => d.hasData).map(d => d.rendimiento))
           
           return (
             <motion.div 
@@ -536,11 +536,11 @@ export const MonthlyPerformanceChart: React.FC<MonthlyChartProps> = ({ data, yea
                 ease: "easeOut", 
                 delay: 0.4 + index * 0.05 
               }}
-              whileHover={monthData.hasData ? { 
+              whileHover={{ 
                 scale: 1.05, 
                 y: -2,
                 transition: { duration: 0.2 }
-              } : {}}
+              }}
             >
               {isHighest && monthData.hasData && (
                 <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center shadow">
@@ -552,13 +552,13 @@ export const MonthlyPerformanceChart: React.FC<MonthlyChartProps> = ({ data, yea
               
               {monthData.hasData ? (
                 <>
-                  <div className={`text-lg font-bold ${
+                  <div className={`text-lg font-bold mb-1 ${
                     monthData.rendimiento >= 94 ? 'text-green-600' :
                     monthData.rendimiento >= 90 ? 'text-green-500' :
                     monthData.rendimiento >= 85 ? 'text-blue-500' :
                     monthData.rendimiento >= 60 ? 'text-yellow-600' : 'text-red-500'
                   }`}>
-                    {monthData.rendimiento}%
+                    {monthData.rendimiento.toFixed(1)}%
                   </div>
                   <div className={`text-xs ${
                     monthData.rendimiento >= 94 ? 'text-green-600' :
@@ -629,7 +629,7 @@ export const KilometersMonthlyChart: React.FC<KilometersChartProps> = ({ data, y
   const monthlyData = months.map((month, index) => {
     const monthData = data.find(item => item.month === index + 1)
     const porcentaje = monthData?.valor_programacion > 0 ? 
-      Math.round((monthData.valor_ejecucion / monthData.valor_programacion) * 100) : 0
+      Number(((monthData.valor_ejecucion / monthData.valor_programacion) * 100).toFixed(1)) : 0
     
     return {
       month,
@@ -774,7 +774,7 @@ export const KilometersMonthlyChart: React.FC<KilometersChartProps> = ({ data, y
               {monthData.hasData ? (
                 <>
                   <div className="text-lg font-bold text-green-700 mb-1">
-                    {monthData.porcentaje}%
+                      {monthData.porcentaje.toFixed(1)}%
                   </div>
                   <div className="text-xs text-green-600/70">
                     {(monthData.ejecutado / 1000).toFixed(1)}K km
@@ -853,7 +853,7 @@ export const BonusMonthlyChart: React.FC<BonusChartProps> = ({ data, year, isLoa
     // Calculate percentage safely - only if we have REAL bonus data
     let porcentaje = 0
     if (bonusValue > 0) {
-      porcentaje = Math.round((finalValue / bonusValue) * 100)
+      porcentaje = Number(((finalValue / bonusValue) * 100).toFixed(1))
     }
     // Don't assume 100% for months without real data
     
@@ -1023,7 +1023,7 @@ export const BonusMonthlyChart: React.FC<BonusChartProps> = ({ data, year, isLoa
               {monthData.hasData ? (
                 <>
                   <div className="text-lg font-bold text-green-700 mb-1">
-                    {monthData.porcentaje}%
+                      {monthData.porcentaje.toFixed(1)}%
                   </div>
                   <div className="text-xs text-green-600/70">
                     ${(monthData.finalValue / 1000).toFixed(1)}K

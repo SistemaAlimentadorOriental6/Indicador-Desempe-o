@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { MonthlyPerformanceChart, KilometersMonthlyChart, BonusMonthlyChart, ThreeYearComparisonChart } from './chart-components'
 
 // Debug flag - set to true to enable debug mode
-const DEBUG_MODE = false
+const DEBUG_MODE = true
 
 // Debug logger function
 function debugLog(...args: any[]) {
@@ -303,7 +303,7 @@ const api = {
         item.percentage !== undefined
           ? item.percentage
           : item.valor_programacion > 0
-            ? Math.round((item.valor_ejecucion / item.valor_programacion) * 100)
+            ? Number(((item.valor_ejecucion / item.valor_programacion) * 100).toFixed(1))
             : 0,
     }))
 
@@ -674,7 +674,7 @@ const BonusCard: React.FC<{ userCode: string }> = ({ userCode }) => {
     const base = displayData.bonusValue || 0
     const final = displayData.finalValue || 0
     if (base > 0) {
-      return Math.max(0, Math.round((final / base) * 100))
+      return Math.max(0, Number(((final / base) * 100).toFixed(1)))
     }
     return 100 // If no base, assume 100% unless there are deductions
   }, [displayData])
@@ -914,7 +914,7 @@ const AnnualProgressCard: React.FC<{ userCode: string }> = ({ userCode }) => {
             (sum: number, item: any) => sum + Number(item.valor_programacion || 0),
             0,
           )
-          const kmPercentage = totalKmProgrammed > 0 ? Math.round((totalKmExecuted / totalKmProgrammed) * 100) : 0
+          const kmPercentage = totalKmProgrammed > 0 ? Number(((totalKmExecuted / totalKmProgrammed) * 100).toFixed(1)) : 0
           
           // Calculate bonus totals
           const monthsWithData = yearKmData.length
@@ -924,8 +924,47 @@ const AnnualProgressCard: React.FC<{ userCode: string }> = ({ userCode }) => {
           if (bonusResult.summary && bonusResult.summary.totalDeduction !== undefined) {
             totalDeductions = bonusResult.summary.totalDeduction
           }
+
           const totalBonusFinal = totalBonusBase - totalDeductions
-          const bonusPercentage = totalBonusBase > 0 ? Math.min(100, Math.max(0, Math.round((totalBonusFinal / totalBonusBase) * 100))) : 100
+          const bonusPercentage = totalBonusBase > 0 ? Math.min(100, Math.max(0, Number(((totalBonusFinal / totalBonusBase) * 100).toFixed(1)))) : 100
+          
+          // Calculate rendimiento general promediando los rendimientos mensuales
+          let rendimientoGeneral = 0
+          const monthlyRendimientos = []
+          
+          for (let month = 1; month <= 12; month++) {
+            const monthKmData = yearKmData.find((item: any) => item.month === month)
+            if (monthKmData) {
+              // Calculate KM percentage for this month
+              const monthKmPercentage = monthKmData.valor_programacion > 0 
+                ? Number(((monthKmData.valor_ejecucion / monthKmData.valor_programacion) * 100).toFixed(1))
+                : 0
+              
+              // Calculate Bonus percentage for this month
+              let monthBonusPercentage = 100
+              const monthBonusData = bonusResult.monthlyBonusData?.find(
+                (item: any) => item.month === month && item.year === year
+              )
+              
+              if (monthBonusData && baseForYear > 0) {
+                const finalBonusForMonth = monthBonusData.finalValue !== undefined 
+                  ? monthBonusData.finalValue 
+                  : (monthBonusData.finalBonus !== undefined ? monthBonusData.finalBonus : baseForYear)
+                monthBonusPercentage = Number(((finalBonusForMonth / baseForYear) * 100).toFixed(1))
+              }
+              
+              // Calculate combined performance for this month
+              const monthRendimiento = Number(((monthKmPercentage + monthBonusPercentage) / 2).toFixed(1))
+              monthlyRendimientos.push(monthRendimiento)
+            }
+          }
+          
+          // Average of monthly rendimientos
+          if (monthlyRendimientos.length > 0) {
+            rendimientoGeneral = Number((
+              monthlyRendimientos.reduce((sum, val) => sum + val, 0) / monthlyRendimientos.length
+            ).toFixed(1))
+          }
           
           return {
             year,
@@ -934,7 +973,7 @@ const AnnualProgressCard: React.FC<{ userCode: string }> = ({ userCode }) => {
             'eficiencia km (%)': kmPercentage,
             'bonificaciones ($)': Math.max(0, totalBonusFinal),
             'eficiencia bonus (%)': bonusPercentage,
-            'rendimiento general (%)': Math.round((kmPercentage + bonusPercentage) / 2)
+            'rendimiento general (%)': rendimientoGeneral
           }
         })
         
@@ -976,15 +1015,18 @@ const AnnualProgressCard: React.FC<{ userCode: string }> = ({ userCode }) => {
   const annualData = useMemo(() => {
     if (!data || !bonusData || !selectedYear) return null
 
-    // 1. Calculate Kilometer Totals
-    const yearKmData = data.monthlyData?.filter((item: any) => item.year === selectedYear) || []
-    const totalKmExecuted = yearKmData.reduce((sum: number, item: any) => sum + Number(item.valor_ejecucion || 0), 0)
+    // 1. Calculate KM Totals
+    const yearKmData = data.monthlyData.filter((item: any) => item.year === selectedYear)
+    const totalKmExecuted = yearKmData.reduce(
+      (sum: number, item: any) => sum + Number(item.valor_ejecucion || 0),
+      0,
+    )
     const totalKmProgrammed = yearKmData.reduce(
       (sum: number, item: any) => sum + Number(item.valor_programacion || 0),
       0,
     )
     const kmPercentage =
-      totalKmProgrammed > 0 ? Math.max(0, Math.round((totalKmExecuted / totalKmProgrammed) * 100)) : 0
+      totalKmProgrammed > 0 ? Math.max(0, Number(((totalKmExecuted / totalKmProgrammed) * 100).toFixed(1))) : 0
 
     // 2. Calculate Bonus Totals
     let totalBonusBase = 0
@@ -1007,11 +1049,48 @@ const AnnualProgressCard: React.FC<{ userCode: string }> = ({ userCode }) => {
     // 3. Calculate Bonus Percentage (0-100%)
     let bonusPercentage = 100
     if (totalBonusBase > 0) {
-      bonusPercentage = Math.min(100, Math.max(0, Math.round((totalBonusFinal / totalBonusBase) * 100)))
+      bonusPercentage = Math.min(100, Math.max(0, Number(((totalBonusFinal / totalBonusBase) * 100).toFixed(1))))
     }
 
-    // 4. Calculate Combined Percentage (0-100%)
-    const combinedPercentage = Math.max(0, Math.round((kmPercentage + bonusPercentage) / 2))
+    // 4. Calculate Combined Percentage usando el método CORRECTO:
+    // Calcular el rendimiento de cada mes y luego promediar
+    let combinedPercentage = 0
+    const monthlyRendimientos = []
+    
+    for (let month = 1; month <= 12; month++) {
+      const monthKmData = yearKmData.find((item: any) => item.month === month)
+      if (monthKmData) {
+        // Calculate KM percentage for this month
+        const monthKmPercentage = monthKmData.valor_programacion > 0 
+          ? Number(((monthKmData.valor_ejecucion / monthKmData.valor_programacion) * 100).toFixed(1))
+          : 0
+        
+        // Calculate Bonus percentage for this month
+        let monthBonusPercentage = 100
+        const baseBonus = getBaseBonusForYear(selectedYear)
+        const monthBonusData = bonusData.monthlyBonusData?.find(
+          (item: any) => item.month === month && item.year === selectedYear
+        )
+        
+        if (monthBonusData && baseBonus > 0) {
+          const finalBonusForMonth = monthBonusData.finalValue !== undefined 
+            ? monthBonusData.finalValue 
+            : (monthBonusData.finalBonus !== undefined ? monthBonusData.finalBonus : baseBonus)
+          monthBonusPercentage = Number(((finalBonusForMonth / baseBonus) * 100).toFixed(1))
+        }
+        
+        // Calculate combined performance for this month
+        const monthRendimiento = Number(((monthKmPercentage + monthBonusPercentage) / 2).toFixed(1))
+        monthlyRendimientos.push(monthRendimiento)
+      }
+    }
+    
+    // Average of monthly rendimientos (same as avgPerformance in chart)
+    if (monthlyRendimientos.length > 0) {
+      combinedPercentage = Number((
+        monthlyRendimientos.reduce((sum, val) => sum + val, 0) / monthlyRendimientos.length
+      ).toFixed(1))
+    }
 
     return {
       year: selectedYear,
@@ -1202,6 +1281,8 @@ const MonthlyProgressCard: React.FC<{ userCode: string }> = ({ userCode }) => {
       setIsLoading(true)
       setError(null)
 
+      debugLog(`[MonthlyProgressCard] Fetching data for user: ${userCode}, year: ${selectedYear}, month: ${selectedMonth}`)
+
       // Fetch both kilometers and bonus data for the year (for chart) and specific month (for details)
       const [kmYearResult, bonusYearResult, kmMonthResult, bonusMonthResult] = await Promise.all([
         selectedYear ? api.fetchKilometers({ userCode, year: selectedYear }) : Promise.resolve(null),
@@ -1210,10 +1291,18 @@ const MonthlyProgressCard: React.FC<{ userCode: string }> = ({ userCode }) => {
         selectedYear && selectedMonth ? api.fetchBonuses({ userCode, year: selectedYear, month: selectedMonth }) : Promise.resolve(null)
       ])
 
+      debugLog(`[MonthlyProgressCard] KM Year Result:`, kmYearResult)
+      debugLog(`[MonthlyProgressCard] Bonus Year Result:`, bonusYearResult)
+      debugLog(`[MonthlyProgressCard] KM Month Result:`, kmMonthResult)
+      debugLog(`[MonthlyProgressCard] Bonus Month Result:`, bonusMonthResult)
+
       // Use year results as primary data source
       const primaryKmResult = kmYearResult || kmMonthResult || await api.fetchKilometers({ userCode })
       const primaryBonusResult = bonusYearResult || bonusMonthResult || await api.fetchBonuses({ userCode })
       
+      debugLog(`[MonthlyProgressCard] Primary KM Result:`, primaryKmResult)
+      debugLog(`[MonthlyProgressCard] Primary Bonus Result:`, primaryBonusResult)
+
       setData(primaryKmResult)
       setBonusData(primaryBonusResult)
 
@@ -1240,7 +1329,7 @@ const MonthlyProgressCard: React.FC<{ userCode: string }> = ({ userCode }) => {
               } else if (monthBonusData.finalBonus !== undefined) {
                 finalBonusForCalc = monthBonusData.finalBonus
               }
-              bonusPercentage = Math.max(0, Math.round((finalBonusForCalc / baseBonus) * 100))
+              bonusPercentage = Number(((finalBonusForCalc / baseBonus) * 100).toFixed(1))
             } else if (monthBonusData) {
               // If there's bonus data but no baseBonus calculation possible, use finalValue directly
               bonusPercentage = monthBonusData.finalValue > 0 ? 100 : 0
@@ -1291,15 +1380,23 @@ const MonthlyProgressCard: React.FC<{ userCode: string }> = ({ userCode }) => {
   const monthlyData = useMemo(() => {
     if (!data || !bonusData || !selectedYear || !selectedMonth) return null
 
+    debugLog(`[MonthlyProgressCard - monthlyData] Calculating for year: ${selectedYear}, month: ${selectedMonth}`)
+    debugLog(`[MonthlyProgressCard - monthlyData] Data:`, data)
+    debugLog(`[MonthlyProgressCard - monthlyData] BonusData:`, bonusData)
+
     // Get kilometers data for the specific month
     const kmMonthData = data.monthlyData?.find(
       (item: any) => item.year === selectedYear && item.month === selectedMonth,
     )
 
+    debugLog(`[MonthlyProgressCard - monthlyData] KM Month Data found:`, kmMonthData)
+
     // Get bonus data for the specific month
     let bonusMonthData = bonusData?.monthlyBonusData?.find(
       (item: any) => item.year === selectedYear && item.month === selectedMonth,
     )
+
+    debugLog(`[MonthlyProgressCard - monthlyData] Bonus Month Data found:`, bonusMonthData)
 
     // If monthlyBonusData is empty but we have bonusData, use the direct data
     if (!bonusMonthData && bonusData?.bonusData) {
@@ -1312,11 +1409,16 @@ const MonthlyProgressCard: React.FC<{ userCode: string }> = ({ userCode }) => {
         finalBonus: bonusData.summary?.finalBonus,
         deductionAmount: bonusData.summary?.totalDeduction || 0,
       }
+      debugLog(`[MonthlyProgressCard - monthlyData] Created bonus data from summary:`, bonusMonthData)
     }
 
-    if (!kmMonthData && !bonusMonthData) return null
+    if (!kmMonthData && !bonusMonthData) {
+      debugLog(`[MonthlyProgressCard - monthlyData] No data found for this month`)
+      return null
+    }
 
     const kmPercentage = kmMonthData?.percentage || 0
+    debugLog(`[MonthlyProgressCard - monthlyData] KM Percentage:`, kmPercentage)
 
     // Handle bonus data with more robust logic
     let baseBonus = bonusMonthData?.bonusValue || bonusMonthData?.baseBonus || 0
@@ -1330,14 +1432,18 @@ const MonthlyProgressCard: React.FC<{ userCode: string }> = ({ userCode }) => {
     let bonusPercentage = 0
 
     if (baseBonus > 0) {
-      bonusPercentage = Math.round((finalBonus / baseBonus) * 100)
+      bonusPercentage = Number(((finalBonus / baseBonus) * 100).toFixed(1))
     } else if (bonusMonthData) {
       // If there's data but baseBonus is 0, it might still be 100% if final is also 0
       bonusPercentage = 100
     }
 
+    debugLog(`[MonthlyProgressCard - monthlyData] Base Bonus: ${baseBonus}, Deduction: ${deductionAmount}, Final: ${finalBonus}, Percentage: ${bonusPercentage}%`)
+
     // Calculate combined performance percentage
-    const combinedPercentage = Math.round((kmPercentage + bonusPercentage) / 2)
+    const combinedPercentage = Number(((kmPercentage + bonusPercentage) / 2).toFixed(1))
+
+    debugLog(`[MonthlyProgressCard - monthlyData] Combined Percentage: ${combinedPercentage}% = (${kmPercentage}% + ${bonusPercentage}%) / 2`)
 
     return {
       year: selectedYear,

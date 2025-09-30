@@ -265,43 +265,48 @@ class BonusesService {
       return []
     }
 
-    return novedades.map((novedad) => {
-      const rule = getDeductionRule(novedad.codigo_factor)
+    return novedades
+      .map((novedad) => {
+        const rule = getDeductionRule(novedad.codigo_factor)
 
-      if (!rule) {
-        // Si no hay regla, devolver una deducción vacía o registrar un error
+        if (!rule) {
+          // Si no hay regla, devolver una deducción vacía o registrar un error
+          return {
+            id: novedad.id,
+            codigo: novedad.codigo_factor,
+            concepto: `Factor no reconocido: ${novedad.codigo_factor}`,
+            fechaInicio: novedad.fecha_inicio_novedad,
+            fechaFin: novedad.fecha_fin_novedad,
+            dias: novedad.dias_novedad,
+            porcentaje: 0,
+            monto: 0,
+            observaciones: novedad.observaciones,
+          }
+        }
+
+        // ✅ CORRECCIÓN: Solo calcular monto si afecta el desempeño
+        let monto = 0
+        if (rule.afectaDesempeno) {
+          if (rule.porcentajeRetirar === 'Día') {
+            monto = rule.valorActual * (novedad.dias_novedad || 1)
+          } else if (typeof rule.porcentajeRetirar === 'number') {
+            monto = baseBonus * rule.porcentajeRetirar
+          }
+        }
+
         return {
           id: novedad.id,
-          codigo: novedad.codigo_factor,
-          concepto: `Factor no reconocido: ${novedad.codigo_factor}`,
+          codigo: rule.item,
+          concepto: rule.causa,
           fechaInicio: novedad.fecha_inicio_novedad,
           fechaFin: novedad.fecha_fin_novedad,
           dias: novedad.dias_novedad,
-          porcentaje: 0,
-          monto: 0,
+          porcentaje: rule.porcentajeRetirar || 0,
+          monto, // Solo tendrá valor si afectaDesempeno es true
           observaciones: novedad.observaciones,
         }
-      }
-
-      let monto = 0
-      if (rule.porcentajeRetirar === 'Día') {
-        monto = rule.valorActual * (novedad.dias_novedad || 1)
-      } else if (typeof rule.porcentajeRetirar === 'number') {
-        monto = baseBonus * rule.porcentajeRetirar
-      }
-
-      return {
-        id: novedad.id,
-        codigo: rule.item,
-        concepto: rule.causa,
-        fechaInicio: novedad.fecha_inicio_novedad,
-        fechaFin: novedad.fecha_fin_novedad,
-        dias: novedad.dias_novedad,
-        porcentaje: rule.porcentajeRetirar || 0,
-        monto,
-        observaciones: novedad.observaciones,
-      }
-    })
+      })
+      // ✅ Mantener todas las deducciones en la lista para mostrarlas, pero solo las que afectan desempeño tendrán monto > 0
   }
 
   // Calcular días de expiración

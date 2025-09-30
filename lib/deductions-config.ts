@@ -19,7 +19,7 @@ export const DEDUCTION_RULES: DeductionRule[] = [
   { item: '12', causa: 'Retardo por Horas', porcentajeRetirar: 0.50, valorActual: 71000, observacion: 'Sí', afectaDesempeno: true },
   
   // Novedades que NO afectan rendimiento
-  { item: '3', causa: 'Incapacidad > 7 días', porcentajeRetirar: 'Día', valorActual: 4733, observacion: 'No Afecta Desempeño', afectaDesempeno: false },
+  { item: '3', causa: 'Incapacidad > 7 días', porcentajeRetirar: 'Día', valorActual: 4733, observacion: 'Sí', afectaDesempeno: true },
   { item: '4', causa: 'Calamidad', porcentajeRetirar: 'Día', valorActual: 4733, observacion: 'No Afecta Desempeño', afectaDesempeno: false },
   { item: '7', causa: 'Vacaciones', porcentajeRetirar: 'Día', valorActual: 4733, observacion: 'No Afecta Desempeño', afectaDesempeno: false },
   { item: '9', causa: 'No Ingreso', porcentajeRetirar: 'Día', valorActual: 4733, observacion: 'No Afecta Desempeño', afectaDesempeno: false },
