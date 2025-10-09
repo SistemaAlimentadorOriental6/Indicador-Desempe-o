@@ -61,7 +61,6 @@ class DatabaseService {
     
     // Si está en cache y es reciente, devolver resultado cacheado
     if (cacheKey && requestCache.has(cacheKey)) {
-      console.log('🚀 Cache HIT - Reutilizando consulta:', cacheKey.substring(0, 100))
       return await requestCache.get(cacheKey)!
     }
     
@@ -128,7 +127,6 @@ class DatabaseService {
     const cacheKey = `rankings:${query}:${JSON.stringify(params)}`
     
     if (enableCache && requestCache.has(cacheKey)) {
-      console.log('🚀 Rankings Cache HIT - Evitando nueva conexión')
       return await requestCache.get(cacheKey)!
     }
     
@@ -151,7 +149,6 @@ class DatabaseService {
     const cacheKey = `bonus:${query}:${JSON.stringify(params)}`
     
     if (enableCache && requestCache.has(cacheKey)) {
-      console.log('🚀 Bonus Cache HIT - Reutilizando resultado')
       return await requestCache.get(cacheKey)!
     }
     

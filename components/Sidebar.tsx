@@ -11,47 +11,57 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onViewChange }) => {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const router = useRouter();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const handleLogout = () => {
     // Clear user session
     logout();
-    
+
     // Clear localStorage
     localStorage.clear();
-    
+
     // Clear sessionStorage
     sessionStorage.clear();
-    
+
     // Close modal
     setShowLogoutModal(false);
-    
+
     // Redirect to login page
     window.location.href = '/';
   };
+
+  // Function to get user initials
+  const getUserInitials = (name: string) => {
+    if (!name) return 'U';
+    const names = name.trim().split(' ');
+    if (names.length === 1) {
+      return names[0].charAt(0).toUpperCase();
+    }
+    return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
+  };
   const menuItems = [
-    { 
-      id: 'rankings', 
-      label: 'Rankings', 
+    {
+      id: 'rankings',
+      label: 'Rankings',
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
         </svg>
       ),
-      category: 'main' 
+      category: 'main'
     },
-    { 
-      id: 'config', 
-      label: 'Configuración', 
+    {
+      id: 'config',
+      label: 'Configuración',
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       ),
-      category: 'main' 
+      category: 'main'
     },
   ];
 
@@ -69,7 +79,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
       )}
       {items.map((item) => {
         const isActive = activeView === item.id;
-        
+
         return (
           <div key={item.id} className="relative px-3">
             <button
@@ -87,7 +97,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
               {isActive && (
                 <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent rounded-2xl"></div>
               )}
-              
+
               {/* Icon Container */}
               <div className={`
                 relative z-10 flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-300
@@ -103,7 +113,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
                   {item.icon}
                 </div>
               </div>
-              
+
               {!collapsed && (
                 <>
                   <span className={`
@@ -112,7 +122,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
                   `}>
                     {item.label}
                   </span>
-                  
+
                   {/* Active Indicator */}
                   {isActive && (
                     <div className="ml-auto relative z-10">
@@ -121,7 +131,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
                   )}
                 </>
               )}
-              
+
               {/* Hover Effect Background */}
               {!isActive && (
                 <div className="absolute inset-0 bg-gradient-to-r from-emerald-50 to-green-50 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -142,7 +152,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
     `}>
       {/* Decorative Top Gradient */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 via-green-500 to-emerald-600"></div>
-      
+
       {/* Header */}
       <div className="flex items-center justify-between p-6 border-b border-emerald-50/80">
         {!collapsed && (
@@ -161,7 +171,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
               {/* Glow Effect */}
               <div className="absolute -inset-1 bg-gradient-to-br from-emerald-400 to-green-500 rounded-2xl blur opacity-30"></div>
             </div>
-            
+
             <div>
               <h1 className="font-bold text-xl bg-gradient-to-r from-slate-800 to-emerald-700 bg-clip-text text-transparent">
                 SAO6
@@ -172,7 +182,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
             </div>
           </div>
         )}
-        
+
         {/* Toggle Button */}
         <button
           onClick={onToggle}
@@ -192,30 +202,30 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
       </nav>
 
       {/* Bottom User Section */}
-      {!collapsed && (
+      {!collapsed && user && (
         <div className="absolute bottom-6 left-4 right-4">
           <div className="bg-gradient-to-br from-white via-emerald-50/30 to-white rounded-2xl p-5 border border-emerald-100/60 shadow-xl shadow-emerald-900/5 backdrop-blur-sm">
             <div className="flex items-center space-x-4">
               {/* User Avatar */}
               <div className="relative">
                 <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-green-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                  <span className="text-white font-bold text-sm">MV</span>
+                  <span className="text-white font-bold text-sm">{getUserInitials(user.nombre)}</span>
                 </div>
                 {/* Online Status */}
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white shadow-sm">
                   <div className="w-full h-full bg-green-400 rounded-full animate-ping opacity-75"></div>
                 </div>
               </div>
-              
+
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-slate-800 truncate">Mario Valle</p>
-                <p className="text-xs text-emerald-600/70 truncate mb-1">Coordionador de operaciones</p>
+                <p className="text-sm font-bold text-slate-800 truncate">{user.nombre}</p>
+                <p className="text-xs text-emerald-600/70 truncate mb-1">{user.rol}</p>
                 <div className="flex items-center">
                   <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
                   <span className="text-xs text-green-600 font-semibold">En línea</span>
                 </div>
               </div>
-              
+
               {/* Logout Button */}
               <button
                 onClick={() => setShowLogoutModal(true)}
@@ -227,15 +237,15 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, activeView, onVi
                 </svg>
               </button>
             </div>
-            
+
             {/* Bottom Accent Line */}
             <div className="mt-4 h-px bg-gradient-to-r from-transparent via-emerald-200 to-transparent"></div>
           </div>
         </div>
       )}
-      
+
       {/* Logout Modal */}
-      <LogoutConfirmation 
+      <LogoutConfirmation
         isOpen={showLogoutModal}
         onClose={() => setShowLogoutModal(false)}
         onConfirm={handleLogout}

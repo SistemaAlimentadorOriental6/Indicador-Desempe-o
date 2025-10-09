@@ -54,7 +54,6 @@ export class CacheManager {
       try {
         const result = await this.redisCache.get<T>(key)
         if (result !== null) {
-          console.log(`Cache HIT (Redis): ${key}`)
           return result
         }
       } catch (error) {
@@ -66,7 +65,6 @@ export class CacheManager {
     // Fallback a memoria
     const result = this.memoryCache.get(key)
     if (result !== undefined) {
-      console.log(`Cache HIT (Memory): ${key}`)
       return result
     }
 

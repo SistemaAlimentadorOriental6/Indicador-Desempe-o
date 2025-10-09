@@ -15,7 +15,6 @@ export async function GET(req: NextRequest) {
   const userCode = searchParams.get('userCode');
   const year = searchParams.get('year');
 
-  console.log(`[Global Efficiency] Iniciando request para usuario: ${userCode}, año: ${year}`);
 
   if (!userCode) {
     return NextResponse.json({ success: false, message: 'El código de usuario es requerido' }, { status: 400 });
@@ -28,10 +27,8 @@ export async function GET(req: NextRequest) {
   try {
     // 🚀 OPTIMIZACIÓN: Usar pool compartido en lugar de conexión individual
     const db = getDatabase();
-    console.log(`[Global Efficiency] Usando pool compartido de MySQL (eliminando conexión individual)`);
     
     // 1. Obtener el último mes disponible en kilómetros para este usuario y año
-    console.log(`[Global Efficiency] Buscando último mes en kilómetros...`);
     // 🚀 OPTIMIZACIÓN: Usar pool compartido con cache para consulta de último mes
     const lastMonthRows = await db.executeRankingsQuery<Array<{last_month: number}>>(
       `SELECT MAX(MONTH(fecha_inicio_programacion)) as last_month
@@ -44,10 +41,8 @@ export async function GET(req: NextRequest) {
     );
 
     const lastMonth = lastMonthRows[0]?.last_month || 12; // Si no hay datos, usar diciembre
-    console.log(`[Global Efficiency] Último mes en kilómetros: ${lastMonth}`);
 
     // 2. Obtener datos de kilómetros por mes
-    console.log(`[Global Efficiency] Obteniendo datos de kilómetros...`);
     // 🚀 OPTIMIZACIÓN: Usar pool compartido con cache para consulta de kilómetros
     const kmRows = await db.executeRankingsQuery(
       `SELECT 
@@ -64,11 +59,9 @@ export async function GET(req: NextRequest) {
       true // Habilitar cache para esta consulta común
     );
 
-    console.log(`[Global Efficiency] Datos de kilómetros obtenidos: ${kmRows.length} registros`);
 
     // 3. Validar que hay datos válidos antes de continuar
     if (kmRows.length === 0) {
-      console.warn(`[Global Efficiency] No hay datos de kilómetros para el usuario ${userCode} en el año ${year}`);
       return NextResponse.json({ 
         success: false, 
         message: 'No hay datos de kilómetros disponibles para calcular eficiencia global' 
@@ -99,7 +92,6 @@ export async function GET(req: NextRequest) {
 
     // Validar que hay al menos un mes válido
     if (validKmMonths === 0) {
-      console.warn(`[Global Efficiency] No hay meses válidos con datos de kilómetros`);
       return NextResponse.json({ 
         success: false, 
         message: 'No hay datos válidos de kilómetros para calcular eficiencia' 
@@ -108,7 +100,6 @@ export async function GET(req: NextRequest) {
 
     // Calcular porcentaje total de kilómetros
     const kmPercentage = totalKmProgrammed > 0 ? Number(((totalKmExecuted / totalKmProgrammed) * 100).toFixed(2)) : 0;
-    console.log(`[Global Efficiency] Total KM: ${totalKmExecuted.toFixed(2)} / ${totalKmProgrammed.toFixed(2)} = ${kmPercentage.toFixed(2)}%`);
 
     // 4. Calcular bonos solo para los meses que tienen datos de kilómetros
     const baseBonus = parseInt(year) >= 2025 ? 142000 : 130000;
@@ -117,7 +108,6 @@ export async function GET(req: NextRequest) {
     let validBonusMonths = 0;
     const monthsWithKmData = Object.keys(kmDataByMonth).map(Number);
 
-    console.log(`[Global Efficiency] Calculando bonos para meses con datos de KM: [${monthsWithKmData.join(', ')}], base: ${baseBonus}`);
 
     // Crear mapa de reglas de deducción para lookups O(1)
     const factorMap = new Map(DEDUCTION_RULES.map(rule => [rule.item, rule]));
@@ -186,11 +176,8 @@ export async function GET(req: NextRequest) {
         totalBonusProgrammed = Number((totalBonusProgrammed + baseBonus).toFixed(2));
         validBonusMonths++;
 
-        console.log(`[Global Efficiency] Mes ${month}: Bono ${monthBonus.toFixed(0)} (${monthBonusPercentage.toFixed(1)}%), Deducciones: ${monthDeductions.toFixed(0)}`);
       } catch (monthError) {
-        console.error(`[Global Efficiency] Error calculando bono para mes ${month}:`, monthError);
         // En caso de error, no asumir bono completo - ser más conservador
-        console.warn(`[Global Efficiency] Saltando mes ${month} debido a error en cálculo de deducciones`);
         // No sumar nada para este mes - más realista
         totalBonusProgrammed = Number((totalBonusProgrammed + baseBonus).toFixed(2)); // Solo contar como programado
       }
@@ -198,7 +185,6 @@ export async function GET(req: NextRequest) {
 
     // Validar que hay al menos un mes válido para bonos
     if (validBonusMonths === 0) {
-      console.warn(`[Global Efficiency] No hay meses válidos con datos de bonos`);
       return NextResponse.json({ 
         success: false, 
         message: 'No se pudieron calcular bonos para ningún mes' 
@@ -207,7 +193,6 @@ export async function GET(req: NextRequest) {
 
     // Calcular porcentaje total de bonos
     const bonusPercentage = totalBonusProgrammed > 0 ? Number(((totalBonusExecuted / totalBonusProgrammed) * 100).toFixed(2)) : 0;
-    console.log(`[Global Efficiency] Total Bonus: ${totalBonusExecuted.toFixed(2)} / ${totalBonusProgrammed.toFixed(2)} = ${bonusPercentage.toFixed(2)}%`);
 
     // 5. Calcular eficiencia global como promedio de eficiencias mensuales (igual que Excel)
     // Primero necesitamos calcular la eficiencia mensual para cada mes con datos
@@ -269,9 +254,7 @@ export async function GET(req: NextRequest) {
               }
               
               monthDeductions += deductionAmount;
-              console.log(`[Global Efficiency] Mes ${month}: Aplicando deducción ${rule.causa} (${novedad.codigo_factor}): $${deductionAmount.toFixed(0)}`);
             } else if (rule && !rule.afectaDesempeno) {
-              console.log(`[Global Efficiency] Mes ${month}: Ignorando deducción ${rule.causa} (${novedad.codigo_factor}) - No afecta desempeño`);
             }
           });
         }
@@ -285,9 +268,7 @@ export async function GET(req: NextRequest) {
         totalMonthlyEfficiency += monthlyEfficiency;
         validMonthsForEfficiency++;
         
-        console.log(`[Global Efficiency] Mes ${month}: KM ${kmData.percentage.toFixed(1)}%, Bono ${monthBonusPercentage.toFixed(1)}%, Eficiencia ${monthlyEfficiency.toFixed(1)}%`);
       } catch (monthError) {
-        console.error(`[Global Efficiency] Error calculando eficiencia para mes ${month}:`, monthError);
       }
     }
     
@@ -295,10 +276,6 @@ export async function GET(req: NextRequest) {
     const efficiency = validMonthsForEfficiency > 0 ? 
       Number((totalMonthlyEfficiency / validMonthsForEfficiency).toFixed(2)) : 0;
 
-    console.log(`[Global Efficiency] User: ${userCode}, Year: ${year}`);
-    console.log(`[Global Efficiency] Meses válidos para eficiencia: ${validMonthsForEfficiency}`);
-    console.log(`[Global Efficiency] KM Total: ${kmPercentage.toFixed(2)}%, Bonus Total: ${bonusPercentage.toFixed(2)}%`);
-    console.log(`[Global Efficiency] Eficiencia Global (promedio mensual): ${efficiency.toFixed(2)}%`);
 
     const response = { 
       success: true, 
@@ -312,12 +289,9 @@ export async function GET(req: NextRequest) {
       } 
     };
 
-    console.log(`[Global Efficiency] Respuesta exitosa:`, response);
     return NextResponse.json(response);
 
   } catch (error) {
-    console.error('[Global Efficiency] Error completo:', error);
-    console.error('[Global Efficiency] Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
     
     // 🚀 OPTIMIZACIÓN: Pool se gestiona automáticamente, no necesita .end()
     

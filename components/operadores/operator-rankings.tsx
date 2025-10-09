@@ -91,6 +91,11 @@ export const OperatorRankings: React.FC = () => {
   const [latestYear, setLatestYear] = useState<number | null>(null)
   const [latestMonth, setLatestMonth] = useState<number | null>(null)
   const [isInitialFilterSet, setIsInitialFilterSet] = useState<boolean>(false)
+  
+  // Estados para eficiencia anual
+  const [operatorsWithAnnualEfficiency, setOperatorsWithAnnualEfficiency] = useState<Operator[]>([])
+  const [isLoadingAnnualEfficiency, setIsLoadingAnnualEfficiency] = useState(false)
+  const [lastOperatorsHash, setLastOperatorsHash] = useState<string>("")
 
   // Cargar estado guardado al inicializar
   useEffect(() => {
@@ -241,7 +246,6 @@ export const OperatorRankings: React.FC = () => {
   
   // Manejar cambios en el filtro de tiempo
   const handleTimeFilterChange = (filter: TimeFilter) => {
-    console.log('Filtro cambiado:', filter);
     
     // Extraer el año del filtro para actualizar los bonos
     let selectedYear = new Date().getFullYear(); // Año actual por defecto
@@ -523,7 +527,7 @@ export const OperatorRankings: React.FC = () => {
     return true;
   });
 
-  // Filtrar y ordenar operadores según los criterios actuales
+  // Filtrar y ordenar operadores según los criterios actuales (sin eficiencia anual primero)
   const filteredOperators = activityFilteredOperators.length > 0 ? filterAndSortOperators(
     activityFilteredOperators,
     filter,
@@ -537,6 +541,23 @@ export const OperatorRankings: React.FC = () => {
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
   const paginatedOperators = filteredOperators.slice(startIndex, endIndex)
+
+  // Determinar el año actual para la eficiencia anual
+  let currentEfficiencyYear = new Date().getFullYear();
+  if (timeFilter === 'year' && timeFilterValue) {
+    currentEfficiencyYear = parseInt(timeFilterValue.toString(), 10);
+  } else if (timeFilter === 'month' && timeFilterValue) {
+    const yearStr = timeFilterValue.toString().split('-')[0];
+    currentEfficiencyYear = parseInt(yearStr, 10);
+  }
+
+  // Combinar operadores paginados con sus datos de eficiencia anual si están disponibles para el año correcto
+  const paginatedOperatorsWithEfficiency = paginatedOperators.map(operator => {
+    const operatorWithEfficiency = operatorsWithAnnualEfficiency.find(op => 
+      op.id === operator.id && op.efficiencyYear === currentEfficiencyYear
+    );
+    return operatorWithEfficiency || operator;
+  });
   
   // Resetear página cuando cambian los filtros
   useEffect(() => {
@@ -547,16 +568,109 @@ export const OperatorRankings: React.FC = () => {
   useEffect(() => {
     // Solo aplicar el filtro local sin recargar datos del servidor
     // La función filterAndSortOperators ya maneja esto
-    console.log(`Aplicando búsqueda: "${searchQuery}" a ${operators.length} operadores`);
   }, [searchQuery]);
+
+  // Cargar eficiencia anual solo para los operadores de la página actual
+  useEffect(() => {
+    const fetchAnnualEfficiency = async () => {
+      if (paginatedOperators.length === 0) return;
+
+      // Determinar el año a usar para la eficiencia anual basado en el filtro
+      let yearForEfficiency = new Date().getFullYear(); // Año actual por defecto
+      
+      if (timeFilter === 'year' && timeFilterValue) {
+        yearForEfficiency = parseInt(timeFilterValue.toString(), 10);
+      } else if (timeFilter === 'month' && timeFilterValue) {
+        // Extraer el año de la fecha en formato YYYY-MM
+        const yearStr = timeFilterValue.toString().split('-')[0];
+        yearForEfficiency = parseInt(yearStr, 10);
+      }
+
+      // Create a hash that includes both operators and year to detect changes
+      const paginatedHash = paginatedOperators.map(op => op.codigo || op.id).join(',') + `_${yearForEfficiency}`;
+      if (paginatedHash === lastOperatorsHash) {
+        return; // Skip if same paginated operators and same year
+      }
+
+      // Check which operators need annual efficiency data for this specific year
+      const operatorsNeedingEfficiency = paginatedOperators.filter(operator => {
+        const existing = operatorsWithAnnualEfficiency.find(op => 
+          op.id === operator.id && op.efficiencyYear === yearForEfficiency
+        );
+        return !existing || existing.annualEfficiency === undefined;
+      });
+
+      if (operatorsNeedingEfficiency.length === 0) {
+        setLastOperatorsHash(paginatedHash);
+        return; // All operators already have efficiency data for this year
+      }
+
+      setIsLoadingAnnualEfficiency(true);
+      setLastOperatorsHash(paginatedHash);
+
+      try {
+        // Process all needed operators in parallel (they're already limited to ~50)
+        const results = await Promise.all(
+          operatorsNeedingEfficiency.map(async (operator) => {
+            try {
+              const operatorCode = operator.codigo;
+              if (!operatorCode) {
+                return { ...operator, annualEfficiency: 0 };
+              }
+
+              const response = await fetch(`/api/user/global-efficiency?userCode=${operatorCode}&year=${yearForEfficiency}`);
+              const result = await response.json();
+              
+              return {
+                ...operator,
+                annualEfficiency: result.success ? result.data.efficiency : 0,
+                efficiencyYear: yearForEfficiency
+              };
+            } catch (error) {
+              return { ...operator, annualEfficiency: 0, efficiencyYear: yearForEfficiency };
+            }
+          })
+        );
+
+        // Update the state by merging new results with existing ones
+        setOperatorsWithAnnualEfficiency(prev => {
+          const updated = [...prev];
+          results.forEach(newOperator => {
+            const existingIndex = updated.findIndex(op => op.id === newOperator.id);
+            if (existingIndex >= 0) {
+              updated[existingIndex] = newOperator;
+            } else {
+              updated.push(newOperator);
+            }
+          });
+          return updated;
+        });
+      } catch (error) {
+        // On error, add operators with 0 efficiency
+        setOperatorsWithAnnualEfficiency(prev => {
+          const updated = [...prev];
+          operatorsNeedingEfficiency.forEach(operator => {
+            const existingIndex = updated.findIndex(op => op.id === operator.id);
+            const operatorWithZeroEfficiency = { ...operator, annualEfficiency: 0, efficiencyYear: yearForEfficiency };
+            if (existingIndex >= 0) {
+              updated[existingIndex] = operatorWithZeroEfficiency;
+            } else {
+              updated.push(operatorWithZeroEfficiency);
+            }
+          });
+          return updated;
+        });
+      } finally {
+        setIsLoadingAnnualEfficiency(false);
+      }
+    };
+
+    fetchAnnualEfficiency();
+  }, [paginatedOperators, lastOperatorsHash, timeFilter, timeFilterValue]);
 
   // Calcular estadísticas de categorías basadas en operadores filtrados por actividad
   const categoryStats = calculateCategoryStats(activityFilteredOperators)
   
-  // Debug: mostrar información de los operadores cargados
-  console.log(`Total de operadores cargados: ${operators.length}`);
-  console.log(`Operadores filtrados por actividad: ${activityFilteredOperators.length}`);
-  console.log('Estadísticas de categorías:', categoryStats);
 
   const handleClearFilters = () => {
     setFilter("all")
@@ -897,6 +1011,11 @@ export const OperatorRankings: React.FC = () => {
         <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-soft flex flex-col items-center justify-center min-h-[300px]">
           <Loader2 className="w-12 h-12 text-primary-500 animate-spin mb-4" />
           <p className="text-lg font-medium text-gray-600">Cargando datos de operadores...</p>
+          {isLoadingAnnualEfficiency && (
+            <p className="text-sm text-green-600 mt-2">
+              🔄 Cargando eficiencia anual...
+            </p>
+          )}
         </div>
       ) : error ? (
         <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-soft overflow-hidden relative">
@@ -941,6 +1060,18 @@ export const OperatorRankings: React.FC = () => {
               operators={filteredOperators}
             />
 
+            {/* Indicador de carga de eficiencia anual */}
+            {isLoadingAnnualEfficiency && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2 text-green-700">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm font-medium">
+                    Cargando eficiencia anual para {operators.length} operadores...
+                  </span>
+                </div>
+              </div>
+            )}
+
                       {/* Información de paginación */}
           <div className="mb-6">
             <Pagination
@@ -957,7 +1088,7 @@ export const OperatorRankings: React.FC = () => {
             {/* Operators Display */}
             {viewMode === "grid" ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                            {paginatedOperators.map((operator, index) => (
+                            {paginatedOperatorsWithEfficiency.map((operator, index) => (
               <OperatorCard
                     key={operator.id}
                 operator={{ ...operator, bonus: operator.bonus ?? { percentage: 0, total: 0, category: 'Taller Conciencia', trend: 'stable', date: null }, km: operator.km ?? { percentage: 0, total: 0, category: 'Taller Conciencia', trend: 'stable', date: null } }}
@@ -973,7 +1104,7 @@ export const OperatorRankings: React.FC = () => {
                   <p className="text-sm text-gray-600 mt-1">Vista detallada de todos los operadores</p>
                 </div>
                 <div className="divide-y divide-gray-100">
-                  {paginatedOperators.map((operator, index) => (
+                  {paginatedOperatorsWithEfficiency.map((operator, index) => (
                     <OperatorListItem
                       key={operator.id}
                       operator={{ ...operator, bonus: operator.bonus ?? { percentage: 0, total: 0, category: 'Taller Conciencia', trend: 'stable', date: null }, km: operator.km ?? { percentage: 0, total: 0, category: 'Taller Conciencia', trend: 'stable', date: null } }}
@@ -1095,7 +1226,7 @@ export const OperatorRankings: React.FC = () => {
           {/* Operators Display */}
           {viewMode === "grid" ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-              {paginatedOperators.map((operator, index) => (
+              {paginatedOperatorsWithEfficiency.map((operator, index) => (
                 <OperatorCard
                   key={operator.id}
                   operator={{ ...operator, bonus: operator.bonus ?? { percentage: 0, total: 0, category: 'Taller Conciencia', trend: 'stable', date: null }, km: operator.km ?? { percentage: 0, total: 0, category: 'Taller Conciencia', trend: 'stable', date: null } }}
@@ -1111,7 +1242,7 @@ export const OperatorRankings: React.FC = () => {
                 <p className="text-sm text-gray-600 mt-1">Vista detallada de todos los operadores</p>
               </div>
               <div className="divide-y divide-gray-100">
-                {paginatedOperators.map((operator, index) => (
+                {paginatedOperatorsWithEfficiency.map((operator, index) => (
                   <OperatorListItem
                     key={operator.id}
                     operator={{ ...operator, bonus: operator.bonus ?? { percentage: 0, total: 0, category: 'Taller Conciencia', trend: 'stable', date: null }, km: operator.km ?? { percentage: 0, total: 0, category: 'Taller Conciencia', trend: 'stable', date: null } }}

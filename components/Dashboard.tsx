@@ -69,10 +69,6 @@ const Dashboard: React.FC = () => {
           <UserRankings />
         </div>
 
-        {/* Kilometers Tracker */}
-        <div className="lg:col-span-1">
-          <KilometersTracker />
-        </div>
       </div>
 
       {/* Additional Analytics Section */}

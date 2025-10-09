@@ -14,6 +14,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Cell,
 } from "recharts"
 import { TrendingUp, Award } from "lucide-react"
 
@@ -160,6 +161,11 @@ export const ThreeYearComparisonChart: React.FC<ThreeYearChartProps> = ({ data, 
                   <stop offset="50%" stopColor="#10b981" />
                   <stop offset="100%" stopColor="#059669" />
                 </linearGradient>
+                <linearGradient id="currentYearBarGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#93c5fd" />
+                  <stop offset="50%" stopColor="#60a5fa" />
+                  <stop offset="100%" stopColor="#3b82f6" />
+                </linearGradient>
               </defs>
               
               <CartesianGrid strokeDasharray="3 3" stroke="#10b981" opacity={0.15} />
@@ -187,11 +193,17 @@ export const ThreeYearComparisonChart: React.FC<ThreeYearChartProps> = ({ data, 
               
               <Bar 
                 dataKey="rendimiento" 
-                fill="url(#performanceBarGradient)"
-                stroke="#10b981"
                 strokeWidth={2}
                 radius={[4, 4, 0, 0]}
-              />
+              >
+                {allYearsData.map((entry, index) => (
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={entry.year === currentYear ? "url(#currentYearBarGradient)" : "url(#performanceBarGradient)"}
+                    stroke={entry.year === currentYear ? "#3b82f6" : "#10b981"}
+                  />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>

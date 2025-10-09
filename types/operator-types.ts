@@ -30,6 +30,8 @@ export interface Operator {
       date: string | null
     }
     efficiency: number
+    annualEfficiency?: number
+    efficiencyYear?: number
     category: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
     rank: number
     weeklyPerformance?: number[]

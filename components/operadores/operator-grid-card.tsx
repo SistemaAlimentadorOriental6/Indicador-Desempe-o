@@ -2,812 +2,757 @@
 
 import React, { useState, useMemo, useCallback, Suspense } from "react"
 import {
-  DollarSign,
-  MapPin,
-  Flame,
-  User,
-  Shield,
-  ChevronLeft,
-  ChevronRight,
-  Search,
-  Grid,
-  Star,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  Medal,
-  Award,
-  AlertTriangle,
-  AlertCircle,
-  Crown
+    MapPin,
+    Flame,
+    ChevronLeft,
+    ChevronRight,
+    Search,
+    TrendingUp,
+    TrendingDown,
+    Minus,
+    Medal,
+    Award,
+    AlertTriangle,
+    AlertCircle,
+    Crown,
+    CheckCircle2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import Image from 'next/image'
+import Image from "next/image"
 
-// Types (manteniendo los originales)
+// Types
 interface Operator {
-  id: string
-  codigo: string
-  name: string
-  cedula: string
-  document?: string
-  position: string
-  zona?: string
-  padrino?: string
-  category: string
-  avatar?: string
-  image?: string
-  streak: number
-  trend?: "up" | "down" | "stable"
-  lastUpdate?: string
-  km: {
-    total: number
-    total_programado?: number
-    total_ejecutado?: number
-    percentage: number
+    id: string
+    codigo: string
+    name: string
+    cedula: string
+    document?: string
+    position: string
+    zona?: string
+    padrino?: string
     category: string
-  }
-  bonus: {
-    total: number
-    percentage: number
-    category: string
-  }
-  efficiency: number
-  timeFilter?: {
-    type: "year" | "month"
-    value: string | number
-  }
-  realRank?: number // Ranking real basado en eficiencia global
+    avatar?: string
+    image?: string
+    streak: number
+    trend?: "up" | "down" | "stable"
+    lastUpdate?: string
+    km: {
+        total: number
+        total_programado?: number
+        total_ejecutado?: number
+        percentage: number
+        category: string
+    }
+    bonus: {
+        total: number
+        percentage: number
+        category: string
+    }
+    efficiency: number
+    annualEfficiency?: number
+    timeFilter?: {
+        type: "year" | "month"
+        value: string | number
+    }
+    realRank?: number
 }
 
 interface OperatorsGridProps {
-  operators: Operator[]
-  onOperatorClick?: (operator: Operator) => void
+    operators: Operator[]
+    onOperatorClick?: (operator: Operator) => void
 }
 
-// Utility functions (exactamente como las tenías)
 const getCategoryIcon = (category: string) => {
-  switch (category) {
-    case "Oro":
-      return <Crown className="w-4 h-4" />
-    case "Plata":
-      return <Medal className="w-4 h-4" />
-    case "Bronce":
-      return <Award className="w-4 h-4" />
-    case "Mejorar":
-      return <AlertTriangle className="w-4 h-4" />
-    case "Taller Conciencia":
-      return <AlertCircle className="w-4 h-4" />
-    default:
-      return <Award className="w-4 h-4" />
-  }
+    switch (category) {
+        case "Oro":
+            return <Crown className="w-4 h-4" />
+        case "Plata":
+            return <Medal className="w-4 h-4" />
+        case "Bronce":
+            return <Award className="w-4 h-4" />
+        case "Mejorar":
+            return <AlertTriangle className="w-4 h-4" />
+        case "Taller Conciencia":
+            return <AlertCircle className="w-4 h-4" />
+        default:
+            return <Award className="w-4 h-4" />
+    }
 }
 
 const getCategoryColor = (category: string) => {
-  switch (category) {
-    case "Oro":
-      return { bg: "bg-gradient-to-r from-yellow-400 to-yellow-600" }
-    case "Plata":
-      return { bg: "bg-gradient-to-r from-gray-400 to-gray-600" }
-    case "Bronce":
-      return { bg: "bg-gradient-to-r from-amber-400 to-amber-600" }
-    case "Mejorar":
-      return { bg: "bg-gradient-to-r from-orange-400 to-orange-600" }
-    case "Taller Conciencia":
-      return { bg: "bg-gradient-to-r from-red-400 to-red-600" }
-    default:
-      return { bg: "bg-gradient-to-r from-gray-400 to-gray-600" }
-  }
+    switch (category) {
+        case "Oro":
+            return { bg: "bg-gradient-to-r from-emerald-400 to-emerald-600", text: "text-emerald-700" }
+        case "Plata":
+            return { bg: "bg-gradient-to-r from-emerald-300 to-emerald-500", text: "text-emerald-600" }
+        case "Bronce":
+            return { bg: "bg-gradient-to-r from-emerald-200 to-emerald-400", text: "text-emerald-500" }
+        case "Mejorar":
+            return { bg: "bg-gradient-to-r from-green-300 to-green-500", text: "text-green-600" }
+        case "Taller Conciencia":
+            return { bg: "bg-gradient-to-r from-green-200 to-green-400", text: "text-green-500" }
+        default:
+            return { bg: "bg-gradient-to-r from-emerald-300 to-emerald-500", text: "text-emerald-600" }
+    }
 }
 
 const getTrendIcon = (trend: string) => {
-  switch (trend) {
-    case "up":
-      return <TrendingUp className="w-3 h-3 text-green-500" />
-    case "down":
-      return <TrendingDown className="w-3 h-3 text-red-500" />
-    default:
-      return <Minus className="w-3 h-3 text-gray-500" />
-  }
+    switch (trend) {
+        case "up":
+            return <TrendingUp className="w-3 h-3 text-emerald-600" />
+        case "down":
+            return <TrendingDown className="w-3 h-3 text-green-600" />
+        default:
+            return <Minus className="w-3 h-3 text-gray-400" />
+    }
 }
 
 const getRankBadgeColor = (rank: number) => {
-  if (rank <= 3) return "bg-gradient-to-r from-yellow-400 to-yellow-600 text-white"
-  if (rank <= 10) return "bg-gradient-to-r from-gray-300 to-gray-500 text-white"
-  return "bg-gradient-to-r from-orange-400 to-orange-600 text-white"
+    if (rank <= 3) return "bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/50"
+    if (rank <= 10) return "bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-md shadow-emerald-400/40"
+    return "bg-gradient-to-br from-green-400 to-green-600 text-white shadow-md shadow-green-400/30"
 }
 
 const formatNumber = (num: number, abbreviated = false, decimals = 0) => {
-  if (abbreviated && num >= 1000000) {
-    return (num / 1000000).toFixed(decimals) + "M"
-  }
-  if (abbreviated && num >= 1000) {
-    return (num / 1000).toFixed(decimals) + "K"
-  }
-  return num.toLocaleString("es-CO", { maximumFractionDigits: decimals })
+    if (abbreviated && num >= 1000000) {
+        return (num / 1000000).toFixed(decimals) + "M"
+    }
+    if (abbreviated && num >= 1000) {
+        return (num / 1000).toFixed(decimals) + "K"
+    }
+    return num.toLocaleString("es-CO", { maximumFractionDigits: decimals })
 }
 
 const formatPercentage = (num: number, decimals = 2) => {
-  return `${num.toFixed(decimals)}%`
+    return `${num.toFixed(decimals)}%`
 }
 
-// Optimized Operator Card Component (manteniendo tu diseño exacto)
 const OperatorCard = React.memo<{
-  operator: Operator
-  rank: number
-  onClick: () => void
-  allOperators: Operator[] // Agregar todos los operadores para calcular ranking
+    operator: Operator
+    rank: number
+    onClick: () => void
+    allOperators: Operator[]
 }>(({ operator, rank, onClick, allOperators }) => {
-  const [imageError, setImageError] = useState(false)
-  const colors = getCategoryColor(operator.category)
-  
-  // Calcular ranking real directamente en el componente
-  const realRank = useMemo(() => {
-    if (!allOperators || allOperators.length === 0) return rank
-    
-    const validOperators = allOperators.filter(op => 
-      typeof op.efficiency === 'number' && !isNaN(op.efficiency)
-    )
-    
-    if (validOperators.length === 0) return rank
-    
-    const sortedByEfficiency = [...validOperators].sort((a, b) => b.efficiency - a.efficiency)
-    const identifier = operator.id || operator.codigo
-    const foundRank = sortedByEfficiency.findIndex(op => (op.id || op.codigo) === identifier) + 1
-    
-    return foundRank > 0 ? foundRank : validOperators.length
-  }, [allOperators, operator.id, operator.codigo, rank])
-  
-  // Debug: mostrar el ranking que se está usando
-  console.log(`Operador ${operator.name}:`, {
-    realRank: realRank,
-    efficiency: operator.efficiency,
-    id: operator.id,
-    rank: rank
-  })
-  
-  // Construir la URL de la imagen usando la cédula o documento como respaldo
-  const documentId = operator.cedula || operator.document || String(operator.id)
-  const imageUrl = `https://admon.sao6.com.co/web/uploads/empleados/${documentId}.jpg`
+    const [imageError, setImageError] = useState(false)
+    const [isHovered, setIsHovered] = useState(false)
+    const colors = getCategoryColor(operator.category)
 
-  // Obtener iniciales del nombre
-  const initials = operator.avatar || operator.name
-    .split(' ')
-    .slice(0, 2)
-    .map(n => n[0])
-    .join('')
-    .toUpperCase()
+    const realRank = useMemo(() => {
+        if (!allOperators || allOperators.length === 0) return rank
 
-  // Función para manejar error de carga de imagen
-  const handleImageError = () => {
-    console.log('Error al cargar la imagen del operador:', operator.name)
-    setImageError(true)
-  }
+        const validOperators = allOperators.filter((op) => typeof op.efficiency === "number" && !isNaN(op.efficiency))
 
-  return (
-    <div
-      className="relative bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden group hover:scale-[1.02]"
-      onClick={onClick}
-    >
-      {/* Rank Badge - ajustado a la esquina superior derecha */}
-      <div
-        className={`absolute top-4 right-4 z-20 w-8 h-8 rounded-full ${getRankBadgeColor(realRank)} flex items-center justify-center text-sm font-bold shadow-lg`}
-        title={`Ranking real: ${realRank}`}
-      >
-        {realRank}
-      </div>
+        if (validOperators.length === 0) return rank
 
-      {/* Background Pattern - manteniendo tu patrón */}
-      <div className="absolute inset-0 bg-gradient-to-br from-gray-50 to-white opacity-50" />
+        const sortedByEfficiency = [...validOperators].sort((a, b) => b.efficiency - a.efficiency)
+        const identifier = operator.id || operator.codigo
+        const foundRank = sortedByEfficiency.findIndex((op) => (op.id || op.codigo) === identifier) + 1
 
-      <div className="relative z-10 p-6">
-        {/* Header con imagen ajustada */}
-        <div className="flex items-start gap-4 mb-6">
-          <div className="relative">
-            {/* Contenedor para la imagen con tamaño ajustado */}
-            <div className="w-20 h-20 rounded-xl overflow-hidden bg-gray-100 relative">
-              {!imageError ? (
-                <Image
-                  src={imageUrl}
-                  alt={operator.name}
-                  width={80}
-                  height={80}
-                  className="w-full h-full object-cover"
-                  onError={handleImageError}
-                  priority
-                />
-              ) : null}
+        return foundRank > 0 ? foundRank : validOperators.length
+    }, [allOperators, operator.id, operator.codigo, rank])
 
-              {/* Fallback cuando no hay imagen */}
-              <div
-                className={`absolute inset-0 ${imageError ? "flex" : "hidden"} items-center justify-center`}
-              >
-                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-600 text-white font-bold text-lg">
-                  {initials}
-                </div>
-              </div>
+    const documentId = operator.cedula || operator.document || String(operator.id)
+    const imageUrl = `https://admon.sao6.com.co/web/uploads/empleados/${documentId}.jpg`
+
+    const initials =
+        operator.avatar ||
+        operator.name
+            .split(" ")
+            .slice(0, 2)
+            .map((n) => n[0])
+            .join("")
+            .toUpperCase()
+
+    const handleImageError = () => {
+        setImageError(true)
+    }
+
+    return (
+        <div
+            className="relative bg-white rounded-3xl shadow-sm hover:shadow-2xl transition-all duration-500 cursor-pointer overflow-hidden group border border-gray-100 hover:border-emerald-300 hover:-translate-y-2 hover:scale-[1.02]"
+            onClick={onClick}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+        >
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/0 via-teal-500/0 to-emerald-500/0 group-hover:from-emerald-500/8 group-hover:via-teal-500/5 group-hover:to-emerald-500/8 transition-all duration-700 pointer-events-none" />
+
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
             </div>
 
             <div
-              className={`absolute -bottom-2 -right-2 w-6 h-6 ${colors.bg} rounded-full flex items-center justify-center text-white shadow-md`}
+                className={`absolute top-4 right-4 z-20 w-11 h-11 rounded-full ${getRankBadgeColor(realRank)} flex items-center justify-center text-sm font-bold backdrop-blur-sm transition-all duration-300 group-hover:scale-110 group-hover:rotate-12`}
             >
-              {getCategoryIcon(operator.category)}
+                #{realRank}
             </div>
 
             {operator.streak >= 30 && (
-              <div className="absolute -top-2 -right-2 bg-orange-500 text-white rounded-full p-1 shadow-md">
-                <Flame className="w-3 h-3" />
-              </div>
+                <div className="absolute top-4 left-4 z-20 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-full px-3 py-1.5 shadow-lg flex items-center gap-1.5 transition-all duration-300 group-hover:scale-105 group-hover:shadow-xl">
+                    <Flame className="w-3.5 h-3.5 animate-pulse" />
+                    <span className="text-xs font-semibold">{operator.streak}</span>
+                </div>
             )}
-          </div>
 
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-gray-800 text-lg truncate" title={operator.name}>
-              {operator.name}
-            </h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Código: {operator.codigo}
-            </p>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2 text-gray-700">
-                <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <span className="truncate" title={operator.zona || ''}>
-                  {operator.zona || "Sin zona"}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-gray-700">
-                <Shield className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <span className="truncate" title={operator.padrino || ''}>
-                  {operator.padrino || "Sin padrino"}
-                </span>
-              </div>
-            </div>
-          </div>
+            <div className="p-6 relative z-10">
+                <div className="flex flex-col items-center mb-6">
+                    <div className="relative mb-4">
+                        {/* Contenedor estilo tarjeta de identificación */}
+                        <div className="w-32 h-40 rounded-2xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 relative shadow-xl transition-all duration-500 group-hover:shadow-2xl group-hover:scale-105">
+                            {/* Foto del operador */}
+                            <div className="w-full h-32 relative overflow-hidden">
+                                {!imageError ? (
+                                    <Image
+                                        src={imageUrl || "/placeholder.svg"}
+                                        alt={operator.name}
+                                        width={128}
+                                        height={128}
+                                        className="w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-110"
+                                        onError={handleImageError}
+                                        priority
+                                    />
+                                ) : null}
 
-          <div className="flex items-center gap-1 text-xs text-gray-500">
-            {operator.trend && getTrendIcon(operator.trend)}
-            {operator.lastUpdate || new Date().toLocaleDateString()}
-          </div>
-        </div>
+                                {imageError && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-emerald-500 to-emerald-600 text-white font-bold text-xl">
+                                        {initials}
+                                    </div>
+                                )}
+                            </div>
 
-        {/* Performance Metrics - exactamente como las tenías */}
-        <div className="space-y-4 mb-6">
-          <div className="bg-blue-50 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-blue-600" />
-                <span className="text-sm font-medium text-blue-800">Kilómetros</span>
-              </div>
+                            {/* Banda inferior con categoría con curva hacia arriba */}
+                            <div className="absolute bottom-0 left-0 right-0 h-8">
+                                {/* Curva cóncava hacia arriba */}
+                                <div
+                                    className={`w-full h-full ${colors.bg} relative`}
+                                    style={{
+                                        clipPath: 'ellipse(60% 100% at 50% 100%)'
+                                    }}
+                                />
+                                <div className={`absolute inset-0 ${colors.bg} flex items-center justify-center text-white shadow-inner`}>
+                                    <div className="flex items-center gap-1.5 relative z-10">
+                                        {getCategoryIcon(operator.category)}
+                                        <span className="text-xs font-bold uppercase tracking-wide">
+                                            {operator.category === "Taller Conciencia" ? "TALLER DE CONCIENCIA" : operator.category.toUpperCase()}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-              <div className="text-right">
-                <div className={`text-lg font-bold ${operator.km.percentage >= 100 ? 'text-green-700' : 'text-blue-900'}`}>
-                  {formatPercentage(operator.km.percentage, 2)}
+                    <div className="text-center mb-2">
+                        <div className="flex items-center justify-center gap-2 mb-1">
+                            <h3 className="font-bold text-gray-900 text-xl leading-tight transition-colors duration-300 group-hover:text-emerald-700">
+                                {operator.name}
+                            </h3>
+                            {operator.efficiency >= 95 && (
+                                <CheckCircle2 className="w-5 h-5 text-emerald-500 transition-all duration-300 group-hover:scale-125 group-hover:rotate-12" />
+                            )}
+                        </div>
+                        <p className="text-sm text-gray-600 font-medium transition-colors duration-300 group-hover:text-emerald-600">
+                            {operator.position}
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-xs text-gray-500 mb-4">
+                        <div className="flex items-center gap-1.5 transition-transform duration-300 group-hover:scale-105">
+                            <MapPin className="w-3.5 h-3.5 text-emerald-500" />
+                            <span className="font-medium">{operator.zona || "Sin zona"}</span>
+                        </div>
+                        {operator.trend && (
+                            <div className="flex items-center gap-1 transition-transform duration-300 group-hover:scale-110">
+                                {getTrendIcon(operator.trend)}
+                            </div>
+                        )}
+                    </div>
                 </div>
-                <div className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">{operator.km.category}</div>
-              </div>
-            </div>
 
-            {/* Barra de progreso para kilómetros */}
-            <div className="w-full bg-blue-200 rounded-full h-2 mb-3 relative overflow-hidden">
-              <div
-                className="h-2 rounded-full transition-all duration-500 relative"
-                style={{
-                  width: `${Math.min(operator.km.percentage || 0, 200)}%`,
-                  maxWidth: '100%',
-                  background: `linear-gradient(90deg, ${
-                    operator.km.percentage >= 100
-                      ? "#10B981" // Verde para valores superiores al 100%
-                      : "#3B82F6"
-                  }, ${
-                    operator.km.percentage >= 100
-                      ? "#059669" // Verde más oscuro para valores superiores al 100%
-                      : "#1E40AF"
-                  })`,
-                }}
-              />
-              {/* Línea de referencia al 100% */}
-              {operator.km.percentage > 100 && (
-                <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
-                  <div className="absolute top-0 left-0 w-full h-full bg-white opacity-20"></div>
-                  <div className="absolute top-0 right-0 w-0.5 h-full bg-white opacity-60"></div>
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                    <div
+                        className="text-center p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 transition-all duration-300 group-hover:shadow-md group-hover:scale-105 group-hover:-translate-y-1"
+                        style={{ transitionDelay: "50ms" }}
+                    >
+                        <div className="text-xs text-emerald-600 mb-1 font-semibold">Eficiencia Actual</div>
+                        <div
+                            className={`font-bold text-base transition-all duration-300 ${operator.efficiency >= 100 ? "text-emerald-600" : "text-gray-900"} group-hover:scale-110`}
+                        >
+                            {formatPercentage(operator.efficiency || 0, 1)}
+                        </div>
+                    </div>
+
+                    <div
+                        className="text-center p-3 rounded-xl bg-gradient-to-br from-green-50 to-green-100/50 transition-all duration-300 group-hover:shadow-md group-hover:scale-105 group-hover:-translate-y-1"
+                        style={{ transitionDelay: "75ms" }}
+                    >
+                        <div className="text-xs text-green-600 mb-1 font-semibold">Eficiencia Anual</div>
+                        {operator.annualEfficiency !== undefined ? (
+                            <div
+                                className={`font-bold text-base transition-all duration-300 ${(operator.annualEfficiency || 0) >= 100 ? "text-green-600" : "text-gray-900"} group-hover:scale-110`}
+                            >
+                                {formatPercentage(operator.annualEfficiency || 0, 1)}
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-center h-6">
+                                <div className="w-4 h-4 border-2 border-green-300 border-t-green-600 rounded-full animate-spin"></div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div
+                        className="text-center p-3 rounded-xl bg-gradient-to-br from-teal-50 to-teal-100/50 transition-all duration-300 group-hover:shadow-md group-hover:scale-105 group-hover:-translate-y-1"
+                        style={{ transitionDelay: "100ms" }}
+                    >
+                        <div className="text-xs text-teal-600 mb-1 font-semibold">Bonos</div>
+                        <div className="font-bold text-base text-gray-900 transition-all duration-300 group-hover:scale-110">
+                            ${formatNumber(operator.bonus.total, true, 0)}
+                        </div>
+                    </div>
+
+                    <div
+                        className="text-center p-3 rounded-xl bg-gradient-to-br from-green-50 to-green-100/50 transition-all duration-300 group-hover:shadow-md group-hover:scale-105 group-hover:-translate-y-1"
+                        style={{ transitionDelay: "125ms" }}
+                    >
+                        <div className="text-xs text-green-600 mb-1 font-semibold">KM</div>
+                        <div className="font-bold text-base text-gray-900 transition-all duration-300 group-hover:scale-110">
+                            {formatNumber(operator.km.total_ejecutado || operator.km.total, true, 1)}
+                        </div>
+                    </div>
                 </div>
-              )}
-            </div>
 
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">
-                  Prog:{" "}
-                  {operator.km.total_programado === 142000 &&
-                  (operator.timeFilter?.type === "year" || operator.timeFilter?.type === "month")
-                    ? "N/A"
-                    : `${(operator.km.total_programado || 0).toLocaleString("es-CO")} km`}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-600">
-                  Ejec:{" "}
-                  {operator.km.total_ejecutado === 142000 &&
-                  (operator.timeFilter?.type === "year" || operator.timeFilter?.type === "month")
-                    ? "N/A"
-                    : `${(operator.km.total_ejecutado || 0).toLocaleString("es-CO")} km`}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-green-50 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-green-600" />
-                <span className="text-sm font-medium text-green-800">Rendimiento Bonos</span>
-              </div>
-
-              <div className="text-right">
-                <div className={`text-lg font-bold ${operator.bonus.percentage >= 100 ? 'text-emerald-700' : 'text-green-900'}`}>
-                  {formatPercentage(operator.bonus.percentage, 2)}
-                </div>
-                <div className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">{operator.bonus.category}</div>
-              </div>
-            </div>
-
-            {/* Barra de progreso para bonos */}
-            <div className="w-full bg-green-200 rounded-full h-2 mb-3 relative overflow-hidden">
-              <div
-                className="h-2 rounded-full transition-all duration-500 relative"
-                style={{
-                  width: `${Math.min(operator.bonus.percentage || 0, 200)}%`,
-                  maxWidth: '100%',
-                  background: `linear-gradient(90deg, ${
-                    operator.bonus.percentage >= 100
-                      ? "#10B981" // Verde para valores superiores al 100%
-                      : "#10B981"
-                  }, ${
-                    operator.bonus.percentage >= 100
-                      ? "#059669" // Verde más oscuro para valores superiores al 100%
-                      : "#059669"
-                  })`,
-                }}
-              />
-              {/* Línea de referencia al 100% */}
-              {operator.bonus.percentage > 100 && (
-                <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
-                  <div className="absolute top-0 left-0 w-full h-full bg-white opacity-20"></div>
-                  <div className="absolute top-0 right-0 w-0.5 h-full bg-white opacity-60"></div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Final Category - exactamente como lo tenías */}
-        <div className="bg-gray-50 rounded-lg p-4">
-          {/* Encabezado con icono */}
-          <div className="flex items-center gap-2 mb-3">
-            {getCategoryIcon(operator.category)}
-            {operator.category}
-          </div>
-
-          {/* Información de eficiencia y valoración */}
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-600">Valoración general:</span>
-            <div className="flex items-center gap-2">
-              <span className={`font-bold text-lg ${operator.efficiency >= 100 ? 'text-green-700' : 'text-gray-900'}`}>
-                {formatPercentage(operator.efficiency || 0, 2)}
+                <div className="space-y-4">
+                    <div>
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-gray-700">Kilómetros</span>
+                            <span
+                                className={`text-xs font-bold transition-colors duration-300 ${operator.km.percentage >= 100 ? "text-emerald-600" : "text-gray-700"} group-hover:text-emerald-600`}
+                            >
+                {formatPercentage(operator.km.percentage, 1)}
               </span>
-              <div
-                className="w-4 h-4 rounded-full"
-                style={{
-                  backgroundColor:
-                    operator.efficiency >= 100
-                      ? "#10B981" // Verde para valores superiores al 100%
-                      : operator.efficiency >= 95
-                      ? "#F59E0B"
-                      : operator.efficiency >= 85
-                        ? "#9CA3AF"
-                        : operator.efficiency >= 75
-                          ? "#CD7F32"
-                          : operator.efficiency >= 60
-                            ? "#EF4444"
-                            : "#6B7280",
-                }}
-              />
-            </div>
-          </div>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden shadow-inner">
+                            <div
+                                className="h-2.5 rounded-full transition-all duration-1000 ease-out bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-600 shadow-sm relative overflow-hidden"
+                                style={{
+                                    width: `${Math.min(operator.km.percentage || 0, 100)}%`,
+                                }}
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                            </div>
+                        </div>
+                    </div>
 
-          {/* Barra de progreso para la eficiencia */}
-          <div className="w-full bg-gray-200 rounded-full h-3 mb-4 relative overflow-hidden">
-            <div
-              className="h-3 rounded-full transition-all duration-500 relative"
-              style={{
-                width: `${Math.min(operator.efficiency || 0, 200)}%`,
-                maxWidth: '100%',
-                background: `linear-gradient(90deg, ${
-                  operator.efficiency >= 100
-                    ? "#10B981" // Verde para valores superiores al 100%
-                    : operator.efficiency >= 95
-                    ? "#FBBF24"
-                    : operator.efficiency >= 85
-                      ? "#D1D5DB"
-                      : operator.efficiency >= 75
-                        ? "#E3A982"
-                        : operator.efficiency >= 60
-                          ? "#F87171"
-                          : "#9CA3AF"
-                }, ${
-                  operator.efficiency >= 100
-                    ? "#059669" // Verde más oscuro para valores superiores al 100%
-                    : operator.efficiency >= 95
-                    ? "#F59E0B"
-                    : operator.efficiency >= 85
-                      ? "#9CA3AF"
-                      : operator.efficiency >= 75
-                        ? "#CD7F32"
-                        : operator.efficiency >= 60
-                          ? "#EF4444"
-                          : "#6B7280"
-                })`,
-              }}
-            />
-            {/* Línea de referencia al 100% */}
-            {operator.efficiency > 100 && (
-              <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
-                <div className="absolute top-0 left-0 w-full h-full bg-white opacity-20"></div>
-                <div className="absolute top-0 right-0 w-0.5 h-full bg-white opacity-60"></div>
-              </div>
-            )}
-          </div>
+                    <div>
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-gray-700">Bonos</span>
+                            <span
+                                className={`text-xs font-bold transition-colors duration-300 ${operator.bonus.percentage >= 100 ? "text-emerald-600" : "text-gray-700"} group-hover:text-emerald-600`}
+                            >
+                {formatPercentage(operator.bonus.percentage, 1)}
+              </span>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden shadow-inner">
+                            <div
+                                className="h-2.5 rounded-full transition-all duration-1000 ease-out bg-gradient-to-r from-green-400 via-green-500 to-green-600 shadow-sm relative overflow-hidden"
+                                style={{
+                                    width: `${Math.min(operator.bonus.percentage || 0, 100)}%`,
+                                }}
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-          {/* Métricas principales */}
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
-              <div className="text-xs text-gray-500 mb-1">Eficiencia</div>
-              <div className="font-bold text-sm">{formatPercentage(operator.efficiency || 0, 2)}</div>
+                <div className="mt-6">
+                    <button className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold py-3.5 rounded-2xl transition-all duration-300 shadow-md hover:shadow-2xl flex items-center justify-center gap-2 group-hover:scale-[1.03] active:scale-[0.98] relative overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                        <span className="relative z-10">Ver Detalles</span>
+                        <ChevronRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-2 relative z-10" />
+                    </button>
+                </div>
             </div>
-
-            <div>
-              <div className="text-xs text-gray-500 mb-1">
-                Bonos{" "}
-                {operator.timeFilter?.type === "year"
-                  ? `(${operator.timeFilter.value})`
-                  : operator.timeFilter?.type === "month"
-                    ? `(${operator.timeFilter.value?.toString().split("-")[0]})`
-                    : "(2025)"}
-              </div>
-              <div className="font-bold text-sm">$ {formatNumber(operator.bonus.total, true, 0)}</div>
-            </div>
-
-            <div>
-              <div className="text-xs text-gray-500 mb-1">KM</div>
-              <div className="font-bold text-sm">
-                {formatNumber(operator.km.total_ejecutado || operator.km.total, true, 2)} km
-              </div>
-            </div>
-          </div>
         </div>
-      </div>
-    </div>
-  )
+    )
 })
 
 OperatorCard.displayName = "OperatorCard"
 
-// Exportar OperatorCard para uso individual
 export { OperatorCard }
 
-// Loading Skeleton
 const OperatorCardSkeleton = () => (
-  <div className="bg-white rounded-2xl shadow-lg p-6">
-    <div className="flex items-start gap-4 mb-6">
-      <div className="w-16 h-16 bg-gray-200 rounded-xl animate-pulse" />
-      <div className="flex-1 space-y-2">
-        <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
-        <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
-        <div className="h-3 bg-gray-200 rounded animate-pulse w-2/3" />
-      </div>
+    <div className="bg-white rounded-3xl shadow-sm p-6 border border-gray-100">
+        <div className="flex flex-col items-center mb-6">
+            <div className="w-28 h-28 bg-gray-200 rounded-3xl animate-pulse mb-4" />
+            <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4 mb-2" />
+            <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
+        </div>
+        <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="h-12 bg-gray-200 rounded animate-pulse" />
+            <div className="h-12 bg-gray-200 rounded animate-pulse" />
+            <div className="h-12 bg-gray-200 rounded animate-pulse" />
+            <div className="h-12 bg-gray-200 rounded animate-pulse" />
+        </div>
+        <div className="space-y-4 mb-6">
+            <div className="h-8 bg-gray-200 rounded animate-pulse" />
+            <div className="h-8 bg-gray-200 rounded animate-pulse" />
+        </div>
+        <div className="h-12 bg-gray-200 rounded-2xl animate-pulse" />
     </div>
-    <div className="space-y-4 mb-6">
-      <div className="h-24 bg-gray-200 rounded-lg animate-pulse" />
-      <div className="h-20 bg-gray-200 rounded-lg animate-pulse" />
-    </div>
-    <div className="h-32 bg-gray-200 rounded-lg animate-pulse" />
-  </div>
 )
 
-// Main Grid Component
 export default function OperatorsGrid({ operators, onOperatorClick }: OperatorsGridProps) {
-  const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(12)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [categoryFilter, setCategoryFilter] = useState<string>("all")
-  const [sortBy, setSortBy] = useState<"rank" | "efficiency" | "bonus" | "km">("rank")
+    const [currentPage, setCurrentPage] = useState(1)
+    const [itemsPerPage, setItemsPerPage] = useState(12)
+    const [searchTerm, setSearchTerm] = useState("")
+    const [categoryFilter, setCategoryFilter] = useState<string>("all")
+    const [sortBy, setSortBy] = useState<"rank" | "efficiency" | "annualEfficiency" | "bonus" | "km">("rank")
+    const [operatorsWithAnnualEfficiency, setOperatorsWithAnnualEfficiency] = useState<Operator[]>([])
+    const [isLoadingAnnualEfficiency, setIsLoadingAnnualEfficiency] = useState(false)
+    const [loadingProgress, setLoadingProgress] = useState(0)
+    const [lastOperatorsHash, setLastOperatorsHash] = useState<string>("")
 
-  // Calcular ranking real basado en eficiencia (ranking global)
-  const operatorsWithRealRank = useMemo(() => {
-    console.log('=== INICIO CÁLCULO RANKING REAL ===')
-    console.log('Operadores recibidos:', operators.length)
-    
-    if (operators.length === 0) {
-      console.log('No hay operadores para calcular ranking')
-      return []
-    }
-    
-    // Verificar que todos los operadores tengan efficiency
-    const validOperators = operators.filter(op => typeof op.efficiency === 'number' && !isNaN(op.efficiency))
-    console.log('Operadores válidos con efficiency:', validOperators.length)
-    
-    if (validOperators.length === 0) {
-      console.log('No hay operadores con efficiency válida')
-      return operators.map(op => ({ ...op, realRank: 1 }))
-    }
-    
-    // Crear una copia de los operadores y ordenarlos por eficiencia para el ranking real
-    const sortedByEfficiency = [...validOperators].sort((a, b) => b.efficiency - a.efficiency)
-    
-    console.log('Top 5 por eficiencia:', sortedByEfficiency.slice(0, 5).map((op, index) => ({
-      rank: index + 1,
-      name: op.name,
-      efficiency: op.efficiency,
-      id: op.id || op.codigo
-    })))
-    
-    // Asignar el ranking real a cada operador
-    const operatorsWithRank = operators.map(operator => {
-      const identifier = operator.id || operator.codigo
-      const realRank = sortedByEfficiency.findIndex(op => (op.id || op.codigo) === identifier) + 1
-      
-      // Si no se encuentra, asignar el último ranking
-      const finalRank = realRank > 0 ? realRank : sortedByEfficiency.length
-      
-      return {
-        ...operator,
-        realRank: finalRank
-      }
-    })
-    
-    console.log('=== FIN CÁLCULO RANKING REAL ===')
-    return operatorsWithRank
-  }, [operators])
-  
-  // Forzar el cálculo si no se ejecutó el useMemo
-  const finalOperators = operatorsWithRealRank.length > 0 ? operatorsWithRealRank : (() => {
-    console.log('=== FORZANDO CÁLCULO RANKING REAL ===')
-    
-    if (operators.length === 0) return []
-    
-    const validOperators = operators.filter(op => typeof op.efficiency === 'number' && !isNaN(op.efficiency))
-    
-    if (validOperators.length === 0) {
-      return operators.map(op => ({ ...op, realRank: 1 }))
-    }
-    
-    const sortedByEfficiency = [...validOperators].sort((a, b) => b.efficiency - a.efficiency)
-    
-    return operators.map(operator => {
-      const identifier = operator.id || operator.codigo
-      const realRank = sortedByEfficiency.findIndex(op => (op.id || op.codigo) === identifier) + 1
-      const finalRank = realRank > 0 ? realRank : sortedByEfficiency.length
-      
-      return {
-        ...operator,
-        realRank: finalRank
-      }
-    })
-  })()
+    const operatorsWithRealRank = useMemo(() => {
+        const sourceOperators = operatorsWithAnnualEfficiency.length > 0 ? operatorsWithAnnualEfficiency : operators
+        
+        if (sourceOperators.length === 0) return []
 
-  // Filtered and sorted operators
-  const filteredOperators = useMemo(() => {
-    const filtered = finalOperators.filter((operator) => {
-      const matchesSearch =
-        operator.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (operator.zona?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-        (operator.padrino?.toLowerCase() || "").includes(searchTerm.toLowerCase())
-      const matchesCategory = categoryFilter === "all" || operator.category === categoryFilter
-      return matchesSearch && matchesCategory
-    })
+        const validOperators = sourceOperators.filter((op) => typeof op.efficiency === "number" && !isNaN(op.efficiency))
 
-    // Sort operators (pero mantener el ranking real)
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case "efficiency":
-          return b.efficiency - a.efficiency
-        case "bonus":
-          return b.bonus.total - a.bonus.total
-        case "km":
-          return (b.km.total_ejecutado || 0) - (a.km.total_ejecutado || 0)
-        default:
-          return 0 // Keep original rank order
-      }
-    })
-
-    return filtered
-  }, [finalOperators, searchTerm, categoryFilter, sortBy])
-
-  // Pagination
-  const totalPages = Math.ceil(filteredOperators.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const paginatedOperators = filteredOperators.slice(startIndex, startIndex + itemsPerPage)
-
-  // Get unique categories
-  const categories = useMemo(() => {
-    const uniqueCategories = [...new Set(finalOperators.map((op) => op.category))]
-    return uniqueCategories
-  }, [finalOperators])
-
-  // Reset page when filters change
-  React.useEffect(() => {
-    setCurrentPage(1)
-  }, [searchTerm, categoryFilter, sortBy])
-
-  const handleOperatorClick = useCallback(
-    (operator: Operator) => {
-      onOperatorClick?.(operator)
-    },
-    [onOperatorClick],
-  )
-
-  return (
-    <div className="space-y-6 p-6 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Operadores</h1>
-          <p className="text-gray-600 mt-1">
-            {filteredOperators.length} de {finalOperators.length} operadores
-          </p>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        {/* Search */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <Input
-            placeholder="Buscar operadores..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-white"
-          />
-        </div>
-
-        {/* Category Filter */}
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-full sm:w-48 bg-white">
-            <SelectValue placeholder="Categoría" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas las categorías</SelectItem>
-            {categories.map((category) => (
-              <SelectItem key={category} value={category}>
-                {category}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Sort */}
-        <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
-          <SelectTrigger className="w-full sm:w-48 bg-white">
-            <SelectValue placeholder="Ordenar por" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="rank">Ranking</SelectItem>
-            <SelectItem value="efficiency">Eficiencia</SelectItem>
-            <SelectItem value="bonus">Bonos</SelectItem>
-            <SelectItem value="km">Kilómetros</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Items per page */}
-        <Select value={itemsPerPage.toString()} onValueChange={(value) => setItemsPerPage(Number(value))}>
-          <SelectTrigger className="w-full sm:w-32 bg-white">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="6">6 por página</SelectItem>
-            <SelectItem value="12">12 por página</SelectItem>
-            <SelectItem value="24">24 por página</SelectItem>
-            <SelectItem value="48">48 por página</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Grid */}
-      <Suspense
-        fallback={
-          <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {Array.from({ length: itemsPerPage }).map((_, i) => (
-              <OperatorCardSkeleton key={i} />
-            ))}
-          </div>
+        if (validOperators.length === 0) {
+            return sourceOperators.map((op) => ({ ...op, realRank: 1 }))
         }
-      >
-        <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {paginatedOperators.map((operator, index) => (
-            <OperatorCard
-              key={operator.id}
-              operator={operator}
-              rank={0}
-              onClick={() => handleOperatorClick(operator)}
-              allOperators={finalOperators}
-            />
-          ))}
-        </div>
-      </Suspense>
 
-      {/* Empty State */}
-      {filteredOperators.length === 0 && (
-        <div className="text-center py-12">
-          <div className="w-24 h-24 mx-auto mb-4 bg-white rounded-full flex items-center justify-center shadow-lg">
-            <Search className="w-8 h-8 text-gray-400" />
-          </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No se encontraron operadores</h3>
-          <p className="text-gray-600">Intenta ajustar los filtros de búsqueda</p>
-        </div>
-      )}
+        const sortedByEfficiency = [...validOperators].sort((a, b) => b.efficiency - a.efficiency)
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white p-4 rounded-lg shadow">
-          <div className="text-sm text-gray-600">
-            Mostrando {startIndex + 1} a {Math.min(startIndex + itemsPerPage, filteredOperators.length)} de{" "}
-            {filteredOperators.length} resultados
-          </div>
+        const operatorsWithRank = sourceOperators.map((operator) => {
+            const identifier = operator.id || operator.codigo
+            const realRank = sortedByEfficiency.findIndex((op) => (op.id || op.codigo) === identifier) + 1
+            const finalRank = realRank > 0 ? realRank : sortedByEfficiency.length
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Anterior
-            </Button>
+            return {
+                ...operator,
+                realRank: finalRank,
+            }
+        })
 
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum
-                if (totalPages <= 5) {
-                  pageNum = i + 1
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i
-                } else {
-                  pageNum = currentPage - 2 + i
+        return operatorsWithRank
+    }, [operators, operatorsWithAnnualEfficiency])
+
+    const finalOperators =
+        operatorsWithRealRank.length > 0
+            ? operatorsWithRealRank
+            : (() => {
+                if (operators.length === 0) return []
+
+                const validOperators = operators.filter((op) => typeof op.efficiency === "number" && !isNaN(op.efficiency))
+
+                if (validOperators.length === 0) {
+                    return operators.map((op) => ({ ...op, realRank: 1 }))
                 }
 
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={currentPage === pageNum ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setCurrentPage(pageNum)}
-                    className="w-10 h-10"
-                  >
-                    {pageNum}
-                  </Button>
-                )
-              })}
+                const sortedByEfficiency = [...validOperators].sort((a, b) => b.efficiency - a.efficiency)
+
+                return operators.map((operator) => {
+                    const identifier = operator.id || operator.codigo
+                    const realRank = sortedByEfficiency.findIndex((op) => (op.id || op.codigo) === identifier) + 1
+                    const finalRank = realRank > 0 ? realRank : sortedByEfficiency.length
+
+                    return {
+                        ...operator,
+                        realRank: finalRank,
+                    }
+                })
+            })()
+
+    const filteredOperators = useMemo(() => {
+        const filtered = finalOperators.filter((operator) => {
+            const matchesSearch =
+                operator.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (operator.zona?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+                (operator.padrino?.toLowerCase() || "").includes(searchTerm.toLowerCase())
+            const matchesCategory = categoryFilter === "all" || operator.category === categoryFilter
+            return matchesSearch && matchesCategory
+        })
+
+        filtered.sort((a, b) => {
+            switch (sortBy) {
+                case "efficiency":
+                    return b.efficiency - a.efficiency
+                case "annualEfficiency":
+                    return (b.annualEfficiency || 0) - (a.annualEfficiency || 0)
+                case "bonus":
+                    return b.bonus.total - a.bonus.total
+                case "km":
+                    return (b.km.total_ejecutado || 0) - (a.km.total_ejecutado || 0)
+                default:
+                    return 0
+            }
+        })
+
+        return filtered
+    }, [finalOperators, searchTerm, categoryFilter, sortBy])
+
+    const totalPages = Math.ceil(filteredOperators.length / itemsPerPage)
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const paginatedOperators = filteredOperators.slice(startIndex, startIndex + itemsPerPage)
+
+    const categories = useMemo(() => {
+        const uniqueCategories = [...new Set(finalOperators.map((op) => op.category))]
+        return uniqueCategories
+    }, [finalOperators])
+
+    // Fetch annual efficiency for all operators in batches
+    React.useEffect(() => {
+        const fetchAnnualEfficiency = async () => {
+            if (operators.length === 0) return
+            
+            // Create a simple hash to detect if operators changed
+            const operatorsHash = operators.map(op => op.codigo || op.id).join(',')
+            if (operatorsHash === lastOperatorsHash && operatorsWithAnnualEfficiency.length === operators.length) {
+                return // Skip if same operators and already loaded
+            }
+
+            setIsLoadingAnnualEfficiency(true)
+            setLoadingProgress(0)
+            setLastOperatorsHash(operatorsHash)
+            const currentYear = new Date().getFullYear()
+            const batchSize = 10 // Process 10 operators at a time
+            const results: Operator[] = []
+
+            try {
+                // Process operators in batches to avoid overwhelming the server
+                for (let i = 0; i < operators.length; i += batchSize) {
+                    const batch = operators.slice(i, i + batchSize)
+                    
+                    const batchResults = await Promise.all(
+                        batch.map(async (operator, batchIndex) => {
+                            try {
+                                const operatorCode = operator.codigo
+                                if (!operatorCode) {
+                                    return {
+                                        ...operator,
+                                        annualEfficiency: 0
+                                    }
+                                }
+
+                                const response = await fetch(`/api/user/global-efficiency?userCode=${operatorCode}&year=${currentYear}`)
+                                const result = await response.json()
+                                
+                                return {
+                                    ...operator,
+                                    annualEfficiency: result.success ? result.data.efficiency : 0
+                                }
+                            } catch (error) {
+                                return {
+                                    ...operator,
+                                    annualEfficiency: 0
+                                }
+                            }
+                        })
+                    )
+                    
+                    results.push(...batchResults)
+                    
+                    // Update progress
+                    const progress = Math.min((results.length / operators.length) * 100, 100)
+                    setLoadingProgress(progress)
+                    
+                    // Update state with partial results for better UX
+                    setOperatorsWithAnnualEfficiency([...results])
+                    
+                    // Small delay between batches to be nice to the server
+                    if (i + batchSize < operators.length) {
+                        await new Promise(resolve => setTimeout(resolve, 100))
+                    }
+                }
+                
+            } catch (error) {
+                setOperatorsWithAnnualEfficiency(operators.map(op => ({ ...op, annualEfficiency: 0 })))
+            } finally {
+                setIsLoadingAnnualEfficiency(false)
+            }
+        }
+
+        fetchAnnualEfficiency()
+    }, [operators, lastOperatorsHash, operatorsWithAnnualEfficiency.length])
+
+    React.useEffect(() => {
+        setCurrentPage(1)
+    }, [searchTerm, categoryFilter, sortBy])
+
+    const handleOperatorClick = useCallback(
+        (operator: Operator) => {
+            onOperatorClick?.(operator)
+        },
+        [onOperatorClick],
+    )
+
+    return (
+        <div className="space-y-6 p-6 bg-gradient-to-br from-gray-50 via-emerald-50/30 to-teal-50/30 min-h-screen">
+            <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+                <div>
+                    <h1 className="text-4xl font-bold text-gray-900 mb-1">Operadores</h1>
+                    <p className="text-gray-600 text-base font-medium">
+                        {filteredOperators.length} de {finalOperators.length} operadores
+                        {isLoadingAnnualEfficiency && (
+                            <span className="ml-2 text-green-600 text-sm flex items-center gap-2">
+                                • Cargando eficiencia anual... ({Math.round(loadingProgress)}%)
+                                <div className="w-16 h-1 bg-gray-200 rounded-full overflow-hidden">
+                                    <div 
+                                        className="h-full bg-green-500 transition-all duration-300"
+                                        style={{ width: `${loadingProgress}%` }}
+                                    />
+                                </div>
+                            </span>
+                        )}
+                    </p>
+                </div>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
+            <div className="flex flex-col sm:flex-row gap-4">
+                <div className="relative flex-1">
+                    <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <Input
+                        placeholder="Buscar operadores..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-12 bg-white rounded-xl border-gray-200 focus:border-emerald-500 focus:ring-emerald-500 h-12 text-base shadow-sm"
+                    />
+                </div>
+
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger className="w-full sm:w-48 bg-white rounded-xl border-gray-200 h-12 shadow-sm">
+                        <SelectValue placeholder="Categoría" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Todas las categorías</SelectItem>
+                        {categories.map((category) => (
+                            <SelectItem key={category} value={category}>
+                                {category}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+
+                <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+                    <SelectTrigger className="w-full sm:w-48 bg-white rounded-xl border-gray-200 h-12 shadow-sm">
+                        <SelectValue placeholder="Ordenar por" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="rank">Ranking</SelectItem>
+                        <SelectItem value="efficiency">Eficiencia Actual</SelectItem>
+                        <SelectItem value="annualEfficiency">Eficiencia Anual</SelectItem>
+                        <SelectItem value="bonus">Bonos</SelectItem>
+                        <SelectItem value="km">Kilómetros</SelectItem>
+                    </SelectContent>
+                </Select>
+
+                <Select value={itemsPerPage.toString()} onValueChange={(value) => setItemsPerPage(Number(value))}>
+                    <SelectTrigger className="w-full sm:w-32 bg-white rounded-xl border-gray-200 h-12 shadow-sm">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="6">6 por página</SelectItem>
+                        <SelectItem value="12">12 por página</SelectItem>
+                        <SelectItem value="24">24 por página</SelectItem>
+                        <SelectItem value="48">48 por página</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+
+            <Suspense
+                fallback={
+                    <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {Array.from({ length: itemsPerPage }).map((_, i) => (
+                            <OperatorCardSkeleton key={i} />
+                        ))}
+                    </div>
+                }
             >
-              Siguiente
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
+                <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {paginatedOperators.map((operator) => (
+                        <OperatorCard
+                            key={operator.id}
+                            operator={operator}
+                            rank={0}
+                            onClick={() => handleOperatorClick(operator)}
+                            allOperators={finalOperators}
+                        />
+                    ))}
+                </div>
+            </Suspense>
+
+            {filteredOperators.length === 0 && (
+                <div className="text-center py-16">
+                    <div className="w-28 h-28 mx-auto mb-6 bg-white rounded-full flex items-center justify-center shadow-xl">
+                        <Search className="w-10 h-10 text-gray-400" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">No se encontraron operadores</h3>
+                    <p className="text-gray-600">Intenta ajustar los filtros de búsqueda</p>
+                </div>
+            )}
+
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between bg-white p-5 rounded-xl shadow-md border border-gray-100">
+                    <div className="text-sm text-gray-600 font-medium">
+                        Mostrando {startIndex + 1} a {Math.min(startIndex + itemsPerPage, filteredOperators.length)} de{" "}
+                        {filteredOperators.length} resultados
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className="rounded-xl h-10 px-4 font-semibold"
+                        >
+                            <ChevronLeft className="w-4 h-4 mr-1" />
+                            Anterior
+                        </Button>
+
+                        <div className="flex items-center gap-1">
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                let pageNum
+                                if (totalPages <= 5) {
+                                    pageNum = i + 1
+                                } else if (currentPage <= 3) {
+                                    pageNum = i + 1
+                                } else if (currentPage >= totalPages - 2) {
+                                    pageNum = totalPages - 4 + i
+                                } else {
+                                    pageNum = currentPage - 2 + i
+                                }
+
+                                return (
+                                    <Button
+                                        key={pageNum}
+                                        variant={currentPage === pageNum ? "default" : "outline"}
+                                        size="sm"
+                                        onClick={() => setCurrentPage(pageNum)}
+                                        className={`w-10 h-10 rounded-xl font-semibold ${currentPage === pageNum ? "bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-md" : ""}`}
+                                    >
+                                        {pageNum}
+                                    </Button>
+                                )
+                            })}
+                        </div>
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage === totalPages}
+                            className="rounded-xl h-10 px-4 font-semibold"
+                        >
+                            Siguiente
+                            <ChevronRight className="w-4 h-4 ml-1" />
+                        </Button>
+                    </div>
+                </div>
+            )}
         </div>
-      )}
-    </div>
-  )
+    )
 }
