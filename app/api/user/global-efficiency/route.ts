@@ -268,9 +268,14 @@ export async function GET(req: NextRequest) {
         totalMonthlyEfficiency += monthlyEfficiency;
         validMonthsForEfficiency++;
         
+        console.log(`[DEBUG] Mes ${month}: KM=${kmData.percentage.toFixed(1)}%, Bonus=${monthBonusPercentage.toFixed(1)}%, Eficiencia=${monthlyEfficiency.toFixed(1)}%`);
+        
       } catch (monthError) {
       }
     }
+    
+    console.log(`[DEBUG] Total meses procesados: ${validMonthsForEfficiency}, Promedio: ${validMonthsForEfficiency > 0 ? (totalMonthlyEfficiency / validMonthsForEfficiency).toFixed(1) : 0}%`);
+    console.log(`[DEBUG] Eficiencias mensuales:`, monthlyEfficiencies);
     
     // Calcular eficiencia global como promedio de eficiencias mensuales
     const efficiency = validMonthsForEfficiency > 0 ? 

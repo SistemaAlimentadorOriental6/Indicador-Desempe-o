@@ -200,6 +200,7 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
     const [annualPerformanceData, setAnnualPerformanceData] = useState<
         Array<{ year: number; efficiency: number }>
     >([])
+    const [chartYearGlobalEfficiency, setChartYearGlobalEfficiency] = useState<number | null>(null)
 
     const operatorCodigo = operator.codigo
 
@@ -330,6 +331,15 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
 
             setIsYearlyPerformanceLoading(true)
             try {
+                // Fetch global efficiency for this year to show correct annual average
+                const globalEffResponse = await fetch(`/api/user/global-efficiency?userCode=${operatorCodigo}&year=${chartYearFilter}`)
+                const globalEffResult = await globalEffResponse.json()
+                if (globalEffResult.success) {
+                    setChartYearGlobalEfficiency(globalEffResult.data.efficiency)
+                } else {
+                    setChartYearGlobalEfficiency(null)
+                }
+
                 // Get available months for the selected year
                 const availableMonths = availableDates.months[chartYearFilter] || []
 
@@ -351,7 +361,7 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
                 })
 
                 const monthlyData = await Promise.all(monthPromises)
-                // Filter out months with 0 efficiency (no real data) and sort by month number
+                // Filter out months with 0 efficiency (no real data) for chart visualization
                 const filteredData = monthlyData
                     .filter(data => data.efficiency > 0)
                     .sort((a, b) => a.monthNumber - b.monthNumber)
@@ -359,6 +369,7 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
             } catch (error) {
                 console.error("Error fetching yearly performance:", error)
                 setYearlyPerformanceData([])
+                setChartYearGlobalEfficiency(null)
             } finally {
                 setIsYearlyPerformanceLoading(false)
             }
@@ -1002,7 +1013,7 @@ export const EnhancedOperatorDetailModal: React.FC<OperatorDetailModalProps> = (
                                                                 <span className="font-semibold text-emerald-700">
                                                                     {chartViewType === "yearly"
                                                                         ? (annualPerformanceData.length > 0 ? (annualPerformanceData.reduce((sum, d) => sum + d.efficiency, 0) / annualPerformanceData.length).toFixed(1) : "0.0")
-                                                                        : (yearlyPerformanceData.length > 0 ? (yearlyPerformanceData.reduce((sum, d) => sum + d.efficiency, 0) / yearlyPerformanceData.length).toFixed(1) : "0.0")
+                                                                        : (chartYearGlobalEfficiency !== null ? chartYearGlobalEfficiency.toFixed(1) : "0.0")
                                                                     }%
                                                                 </span>
                                                                 <span className="ml-1">promedio {chartViewType === "yearly" ? "histórico" : "anual"}</span>
