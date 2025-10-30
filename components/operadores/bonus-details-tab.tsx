@@ -137,16 +137,14 @@ const getAvailableMonthsForYear = async (userCode: string, year: number): Promis
         const availableMonths: number[] = []
         
         // Determine the maximum month to check based on the year
-        let maxMonth = 12 // Default to all months
-        if (year === 2025) {
-            maxMonth = 8 // Limit 2025 to August only
-        } else if (year === currentYear) {
+        let maxMonth = 12 // Default to all months for past years
+        if (year === currentYear) {
             maxMonth = currentMonth // For current year, up to current month
         } else if (year > currentYear) {
             return [] // No data for future years
         }
         
-        // Check each month to see if it has data
+        // Check each month to see if it has real data
         for (let month = 1; month <= maxMonth; month++) {
             try {
                 const res = await fetch(`/api/user/bonuses?codigo=${userCode}&year=${year}&month=${month}`)
@@ -154,8 +152,21 @@ const getAvailableMonthsForYear = async (userCode: string, year: number): Promis
                     const json = await res.json()
                     const payload = json?.data ?? json
                     
-                    // Check if there's actual data (baseBonus > 0 or deductions exist)
-                    if (payload.baseBonus > 0 || (payload.deductions && payload.deductions.length > 0)) {
+                    // Only include months with real data:
+                    // Real data = records exist in database (even if codigo_factor 0)
+                    // No data = no records found (person didn't work that month)
+                    // Check for explicit "no data" message from API
+                    const isDefaultResponse = payload.message && 
+                                             payload.message.includes('No se encontraron novedades')
+                    
+                    // Has real data if: 
+                    // 1. Has deductions (with or without amounts), OR
+                    // 2. Has baseBonus but is NOT a default "no data" response
+                    const hasRealData = !isDefaultResponse && 
+                                       payload.baseBonus && 
+                                       payload.baseBonus > 0
+                    
+                    if (hasRealData) {
                         availableMonths.push(month)
                     }
                 }
@@ -254,16 +265,24 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                             const json = await res.json()
                             const payload = json?.data ?? json
 
-                            // Only add if there's actual data (baseBonus > 0 or deductions exist)
-                            if (payload.baseBonus > 0 || (payload.deductions && payload.deductions.length > 0)) {
-                                const percentage = payload.baseBonus > 0 ? (payload.finalBonus / payload.baseBonus) * 100 : 100
+                            // Only add if there's real data (records exist in database)
+                            // Exclude default responses when no records found
+                            const isDefaultResponse = payload.message && 
+                                                     payload.message.includes('No se encontraron novedades')
+                            
+                            const hasRealData = !isDefaultResponse && 
+                                               payload.baseBonus && 
+                                               payload.baseBonus > 0
+                            
+                            if (hasRealData) {
+                                const percentage = (payload.finalBonus / payload.baseBonus) * 100
 
                                 monthlyData.push({
                                     month: obtenerNombreMes(month).substring(0, 3),
                                     monthNumber: month,
                                     percentage: Math.round(percentage * 10) / 10,
-                                    baseBonus: payload.baseBonus || 0,
-                                    finalBonus: payload.finalBonus || 0,
+                                    baseBonus: payload.baseBonus,
+                                    finalBonus: payload.finalBonus,
                                     deductionAmount: payload.deductionAmount || 0,
                                 })
                             }
@@ -273,6 +292,9 @@ const BonusDetailsTab: React.FC<BonusDetailsTabProps> = ({ userCode }) => {
                         console.log(`No data for month ${month}`)
                     }
                 }
+
+                // Sort by month number to ensure chronological order
+                monthlyData.sort((a, b) => a.monthNumber - b.monthNumber)
 
                 setMonthlyPerformance(monthlyData)
             } catch (error) {
