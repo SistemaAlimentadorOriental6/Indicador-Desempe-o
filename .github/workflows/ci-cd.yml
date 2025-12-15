@@ -5,6 +5,11 @@ on:
     branches:
       - main
 
+# Variables de entorno globales para evitar problemas de permisos con pnpm
+env:
+  PNPM_HOME: ${{ github.workspace }}/.pnpm
+  NPM_CONFIG_STORE_DIR: ${{ github.workspace }}/.pnpm-store
+
 jobs:
   # Build y Test
   build:
@@ -19,6 +24,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+      
+      # Resetear configuración de pnpm para evitar usar paths con permisos restringidos
+      - name: Limpiar configuración global de pnpm
+        run: |
+          pnpm config delete store-dir --global 2>/dev/null || true
+          echo "Store configurado en: ${{ github.workspace }}/.pnpm-store"
       
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
@@ -77,9 +88,8 @@ jobs:
       # Configurar store de pnpm persistente en el servidor
       - name: Configurar pnpm store
         run: |
-          sudo mkdir -p /var/www/.pnpm-store
-          sudo chown -R $USER:$USER /var/www/.pnpm-store
-          pnpm config set store-dir /var/www/.pnpm-store
+          mkdir -p /var/www/operaciones/indicador-desempeno/.pnpm-store
+          pnpm config set store-dir /var/www/operaciones/indicador-desempeno/.pnpm-store
       
       - name: Instalar dependencias
         working-directory: /var/www/operaciones/indicador-desempeno
