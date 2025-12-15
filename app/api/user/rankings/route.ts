@@ -7,10 +7,10 @@ import { DEDUCTION_RULES } from "@/lib/deductions-config";
 import { getMssqlPool } from "@/lib/mssql";
 import { getDatabase } from "@/lib/database";
 import {
-  determineBonusCategory,
-  determineKmCategory,
-  determineFinalCategory,
-} from "@/utils/ranking-utils";
+  clasificarBono,
+  clasificarKm,
+  determinarCategoriaFinal,
+} from "@/utils/clasificacion-cualitativa";
 
 // Helper para parsear fechas en formato YYYYMMDD
 const parseDateYYYYMMDD = (dateStr: string | null | undefined): string | null => {
@@ -274,7 +274,10 @@ export async function GET(request: Request) {
       LEFT JOIN (
         SELECT 
           v.codigo_empleado,
-          ROUND(SUM(v.valor_ejecucion) / NULLIF(SUM(v.valor_programacion), 0) * 100, 2) AS porcentaje,
+          ${filterType === 'year' 
+            ? `ROUND(AVG(CASE WHEN v.valor_programacion > 0 THEN (v.valor_ejecucion / v.valor_programacion * 100) ELSE 0 END), 2) AS porcentaje,`
+            : `ROUND(SUM(v.valor_ejecucion) / NULLIF(SUM(v.valor_programacion), 0) * 100, 2) AS porcentaje,`
+          }
           SUM(v.valor_ejecucion) AS total,
           MAX(v.fecha_fin_programacion) AS fecha
         FROM variables_control v FORCE INDEX (idx_variables_control_optimized)
@@ -287,7 +290,10 @@ export async function GET(request: Request) {
       LEFT JOIN (
         SELECT 
           v.codigo_empleado,
-          ROUND(SUM(v.valor_ejecucion) / NULLIF(SUM(v.valor_programacion), 0) * 100, 2) AS porcentaje,
+          ${filterType === 'year' 
+            ? `ROUND(AVG(CASE WHEN v.valor_programacion > 0 THEN (v.valor_ejecucion / v.valor_programacion * 100) ELSE 0 END), 2) AS porcentaje,`
+            : `ROUND(SUM(v.valor_ejecucion) / NULLIF(SUM(v.valor_programacion), 0) * 100, 2) AS porcentaje,`
+          }
           SUM(v.valor_ejecucion) AS total_ejecutado,
           SUM(v.valor_programacion) AS total_programado,
           MAX(v.fecha_fin_programacion) AS fecha
@@ -474,6 +480,11 @@ export async function GET(request: Request) {
     
     // Procesamiento SUPER optimizado con Map para lookups O(1)
     const factorMap = new Map(DEDUCTION_RULES.map(rule => [rule.item, rule]));
+    
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`🚀 [INICIO] Procesando ${users.length} operadores con clasificación cualitativa...`);
+    console.log(`📅 [FILTRO] Tipo: ${filterType} | Año: ${filterYear} | Mes: ${filterMonth || 'todos'}`);
+    console.log(`${'='.repeat(80)}\n`);
 
     const rankings = users.map((user: any) => {
       if (!user.codigo) return null;
@@ -532,13 +543,65 @@ export async function GET(request: Request) {
       const performanceBonusValue = Math.max(0, baseBonus - performanceDeduction);
       const bonusPercentage = baseBonus > 0 ? (performanceBonusValue / baseBonus) * 100 : 0;
       
-      const bonusCategory = determineBonusCategory(bonusPercentage);
-      const kmCategory = determineKmCategory(user.km_porcentaje);
-      const combinedCategory = determineFinalCategory(bonusCategory, kmCategory);
+      const bonusCategory = clasificarBono(bonusPercentage);
+      const kmCategory = clasificarKm(user.km_porcentaje);
+      const combinedCategory = determinarCategoriaFinal(bonusPercentage, user.km_porcentaje);
       
       // Formatear valores de forma optimizada
       const formattedBonusPercentage = Math.round(bonusPercentage * 100) / 100;
       const formattedKmPercentage = Math.round(user.km_porcentaje * 100) / 100;
+      
+      // Debug: Log de clasificación para cada operador
+      const periodoTexto = filterType === 'year' ? `ANUAL ${filterYear}` : 
+                          filterType === 'month' ? `MENSUAL ${filterYear}-${String(filterMonth).padStart(2, '0')}` : 
+                          'GLOBAL';
+      
+      // Log especial para usuarios específicos para debug
+      const isTargetUser = user.nombre && (
+        user.nombre.toUpperCase().includes('DANILO') || 
+        user.nombre.toUpperCase().includes('LUIS DANIEL')
+      );
+      
+      if (isTargetUser) {
+        // Calcular método anterior para comparación
+        const metodoAnterior = user.km_total_programado > 0 ? 
+          Math.round((user.km_total_ejecutado / user.km_total_programado * 100) * 100) / 100 : 0;
+        
+        console.log(`🚨 [DEBUG ESPECIAL] ${user.nombre} (${user.codigo}) - ${periodoTexto}:`, {
+          bono: `${formattedBonusPercentage}% (${bonusCategory})`,
+          km: `${formattedKmPercentage}% (${kmCategory})`,
+          kmSinRedondear: user.km_porcentaje,
+          promedio: `${Math.round(((formattedBonusPercentage + formattedKmPercentage) / 2) * 100) / 100}%`,
+          categoriaFinal: combinedCategory,
+          razonamiento: `${bonusCategory} + ${kmCategory} = ${combinedCategory}`,
+          comparacionMetodos: filterType === 'year' ? {
+            metodoNuevo: `${formattedKmPercentage}% (promedio mensual)`,
+            metodoAnterior: `${metodoAnterior}% (suma total)`,
+            diferencia: `${Math.round((formattedKmPercentage - metodoAnterior) * 100) / 100}%`
+          } : undefined,
+          datosOriginales: {
+            kmEjecutado: user.km_total_ejecutado,
+            kmProgramado: user.km_total_programado,
+            kmPorcentajeExacto: user.km_porcentaje,
+            bonusTotal: bonusValue,
+            baseBonus: baseBonus,
+            totalDeduction: totalDeduction
+          }
+        });
+      } else {
+        console.log(`🔍 [DEBUG] ${user.nombre} (${user.codigo}) - ${periodoTexto}:`, {
+          bono: `${formattedBonusPercentage}% (${bonusCategory})`,
+          km: `${formattedKmPercentage}% (${kmCategory})`,
+          promedio: `${Math.round(((formattedBonusPercentage + formattedKmPercentage) / 2) * 100) / 100}%`,
+          categoriaFinal: combinedCategory,
+          razonamiento: `${bonusCategory} + ${kmCategory} = ${combinedCategory}`,
+          datosOriginales: filterType === 'year' ? {
+            kmEjecutado: user.km_total_ejecutado,
+            kmProgramado: user.km_total_programado,
+            bonusTotal: bonusValue
+          } : undefined
+        });
+      }
       
       // Para filtros anuales, usar la misma lógica que Excel (promedio de eficiencias mensuales)
       // Para filtros mensuales o globales, usar el promedio simple
@@ -642,8 +705,37 @@ export async function GET(request: Request) {
       operator.rank = index + 1;
     });
     
+    // Debug: Resumen de clasificaciones
+    const categoryStats = {
+      'Oro': rankings.filter((op: any) => op.category === 'Oro').length,
+      'Plata': rankings.filter((op: any) => op.category === 'Plata').length,
+      'Bronce': rankings.filter((op: any) => op.category === 'Bronce').length,
+      'Mejorar': rankings.filter((op: any) => op.category === 'Mejorar').length,
+      'Taller Conciencia': rankings.filter((op: any) => op.category === 'Taller Conciencia').length
+    };
+    
+    const periodoResumen = filterType === 'year' ? `DATOS ANUALES ${filterYear}` : 
+                          filterType === 'month' ? `DATOS MENSUALES ${filterYear}-${String(filterMonth).padStart(2, '0')}` : 
+                          'DATOS GLOBALES';
+    
+    console.log(`📊 [RESUMEN ${periodoResumen}] Total operadores procesados: ${rankings.length}`);
+    console.log(`📊 [CATEGORÍAS]:`, categoryStats);
+    console.log(`📊 [PORCENTAJES]:`, {
+      'Oro': `${((categoryStats['Oro'] / rankings.length) * 100).toFixed(1)}%`,
+      'Plata': `${((categoryStats['Plata'] / rankings.length) * 100).toFixed(1)}%`,
+      'Bronce': `${((categoryStats['Bronce'] / rankings.length) * 100).toFixed(1)}%`,
+      'Mejorar': `${((categoryStats['Mejorar'] / rankings.length) * 100).toFixed(1)}%`,
+      'Taller Conciencia': `${((categoryStats['Taller Conciencia'] / rankings.length) * 100).toFixed(1)}%`
+    });
+    
+    if (filterType === 'year') {
+      console.log(`📅 [NOTA] Los porcentajes mostrados son ACUMULADOS de todo el año ${filterYear}`);
+      console.log(`📅 [NOTA] Km ejecutados/programados y bonos son la SUMA total del año`);
+    }
+    
      const processingEndTime = Date.now();
-     console.log(`⚡ Procesamiento SUPER optimizado completado en ${processingEndTime - processingStartTime}ms`);
+     console.log(`\n⚡ Procesamiento SUPER optimizado completado en ${processingEndTime - processingStartTime}ms`);
+     console.log(`${'='.repeat(80)}\n`);
      
      // Calcular información de filtros de forma optimizada
      const allDates = rankings

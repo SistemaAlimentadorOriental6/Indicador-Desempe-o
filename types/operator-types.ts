@@ -48,6 +48,13 @@ export interface Operator {
       type: TimeFilterType
       value?: string | number | null
     }
+    // Detalles de la clasificación cualitativa
+    clasificacionDetalles?: {
+      razonamiento: string
+      categoriaBono: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
+      categoriaKm: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
+      categoriaFinal: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"
+    }
   }
   
   export type FilterType = "all" | "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia"

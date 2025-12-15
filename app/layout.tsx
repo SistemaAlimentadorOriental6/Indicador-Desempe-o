@@ -6,7 +6,7 @@ export const metadata = {
   title: "Indicador de desempeño",
   description: "Aplicación para visualizar Kilómetros y bonos de los operadores",
   icons: {
-    icon: "./sao6-logo.png", 
+    icon: "./sao6-logo.png",
     apple: "./sao6-logo.png",
   },
 };
@@ -22,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/sao6-logo.png" />
         <title>{metadata.title}</title>
       </head>
-      <body className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-teal-50 font-sans antialiased text-slate-800">
+      <body className="min-h-screen bg-white font-sans antialiased text-slate-800">
         <AuthProvider>
           <main className="flex flex-col min-h-screen w-full max-w-[1920px] mx-auto px-2 md:px-6 lg:px-12">
             {children}

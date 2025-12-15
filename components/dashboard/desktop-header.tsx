@@ -1,17 +1,22 @@
 "use client"
 
-import { motion } from "framer-motion"
 import { Sparkles } from "lucide-react"
-import { Button } from "@/components/ui/button"
 
-interface WelcomeScreenProps {
+interface DesktopHeaderProps {
   user: any
-  openProfile: () => void
-  handleLogout: () => void
+  bonusesAvailable?: number
+  lastMonthName?: string
+  lastMonthYear?: number
+  openProfile?: () => void
 }
 
-export default function WelcomeScreen({ user, openProfile, handleLogout }: WelcomeScreenProps) {
-  // Get greeting based on time
+export default function DesktopHeader({
+  user,
+  bonusesAvailable = 0,
+  lastMonthName = "",
+  lastMonthYear = new Date().getFullYear(),
+  openProfile
+}: DesktopHeaderProps) {
   const getGreeting = () => {
     const hour = new Date().getHours()
     if (hour < 12) return "Buenos días"
@@ -19,72 +24,27 @@ export default function WelcomeScreen({ user, openProfile, handleLogout }: Welco
     return "Buenas noches"
   }
 
+  const userFirstName = user?.nombre?.split(" ")[0] || "Usuario"
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.2, duration: 0.5 }}
-      className="bg-white rounded-3xl shadow-lg overflow-hidden mb-8 relative border-2 border-green-200"
-    >
-      {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-green-50/30 to-white z-0"></div>
-
-        <div className="absolute top-0 right-0 w-64 h-64 bg-green-100/20 rounded-full -translate-y-1/2 translate-x-1/2 blur-md"></div>
-        <div className="absolute bottom-0 left-0 w-80 h-80 bg-green-100/15 rounded-full translate-y-1/2 -translate-x-1/4 blur-md"></div>
-      </div>
-
-      <div className="p-6 relative z-10">
-        {/* Header content */}
-        <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-8">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="h-1 w-10 bg-green-400 rounded-full"></div>
-              <h2 className="text-green-700 font-bold text-2xl">SAO6</h2>
-            </div>
-            <p className="text-green-600 mt-2 font-light flex items-center">
-              <Sparkles className="h-3.5 w-3.5 mr-1.5 text-green-500" />
-              {getGreeting()}, {user?.nombre?.split(" ")[0] || "Francisco"}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-4">{/* Placeholder for badges and buttons */}</div>
+    <div className="bg-white p-6">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 bg-green-50 p-2 rounded-lg w-fit">
+          <Sparkles className="h-4 w-4 text-green-600" />
+          <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">
+            Panel Principal
+          </span>
         </div>
 
-        <motion.div
-          className="bg-white/80 backdrop-blur-sm rounded-2xl border-2 border-green-200 p-8 text-center hover:bg-green-50/50 transition-colors"
-          whileHover={{ scale: 1.01 }}
-          transition={{ type: "spring", stiffness: 400, damping: 10 }}
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="space-y-4"
-          >
-            <h3 className="text-green-700 font-bold text-3xl">SAO6 te desea un excelente día</h3>
+        <h1 className="text-2xl font-bold text-green-800">
+          {getGreeting()}, <span className="text-green-600">{userFirstName}</span>
+        </h1>
 
-            <p className="text-green-600 text-lg font-light">
-              Esperamos que tengas una jornada productiva y exitosa, {user?.nombre?.split(" ")[0] || "Francisco"}
-            </p>
-
-            <motion.div
-              className="flex justify-center mt-6"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3, duration: 0.6 }}
-            >
-              <Button
-                onClick={openProfile}
-                className="bg-white hover:bg-green-50 text-green-700 px-8 py-3 rounded-xl border-2 border-green-300 transition-all hover:scale-105 font-medium"
-              >
-                <Sparkles className="h-5 w-5 mr-2" />
-                Comenzar mi día
-              </Button>
-            </motion.div>
-          </motion.div>
-        </motion.div>
+        <p className="text-green-600/70">
+          Bienvenido de vuelta a <span className="font-semibold text-green-700">SAO6</span>.
+          Esperamos que tengas una jornada productiva hoy.
+        </p>
       </div>
-    </motion.div>
+    </div>
   )
 }

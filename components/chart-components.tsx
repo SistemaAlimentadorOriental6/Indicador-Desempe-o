@@ -1,12 +1,7 @@
 "use client"
 
-import React from "react"
-import { motion } from "framer-motion"
+import React, { memo, useMemo } from "react"
 import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
   BarChart,
   Bar,
   XAxis,
@@ -18,1069 +13,567 @@ import {
 } from "recharts"
 import { TrendingUp, Award } from "lucide-react"
 
-// Custom tooltip for performance chart
-export const PerformanceTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    const value = payload[0]?.value || 0
-    return (
-      <div className="bg-gradient-to-br from-white via-green-50/80 to-white border-2 border-green-200/60 backdrop-blur-sm p-4 rounded-xl shadow-xl">
-        <div className="flex items-center gap-2 mb-2">
-          <Award className="h-4 w-4 text-green-600" />
-          <p className="font-bold text-green-800 text-sm">Año {label}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-gradient-to-r from-green-500 to-green-600" />
-          <span className="text-green-700 font-semibold text-lg">{value}%</span>
-          <span className="text-green-600/80 text-sm">rendimiento</span>
-        </div>
-        <div className="mt-2 text-xs text-green-600/70">
-          {value >= 94 ? "Oro" : 
-           value >= 90 ? "Plata" : 
-           value >= 85 ? "Bronce" : 
-           value >= 60 ? "Mejorar" : "Taller Conciencia"}
-        </div>
-      </div>
-    );
-  }
-  return null;
-};
+// ============================================
+// CONSTANTES Y UTILIDADES
+// ============================================
 
-// Three Year Comparison Chart Component
-interface ThreeYearChartProps {
-  data: any[]
-  isLoading?: boolean
-  currentYearPerformance?: number // Add this to receive actual 2025 performance
+const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+const ANIO_ACTUAL = new Date().getFullYear()
+const MES_ACTUAL = new Date().getMonth() + 1
+
+// Obtiene la categoría según el porcentaje de rendimiento
+const obtenerCategoria = (porcentaje: number): { texto: string; color: string } => {
+  if (porcentaje >= 94) return { texto: "Oro", color: "text-green-600" }
+  if (porcentaje >= 90) return { texto: "Plata", color: "text-green-500" }
+  if (porcentaje >= 85) return { texto: "Bronce", color: "text-blue-500" }
+  if (porcentaje >= 60) return { texto: "Mejorar", color: "text-yellow-600" }
+  return { texto: "Taller", color: "text-red-500" }
 }
 
-export const ThreeYearComparisonChart: React.FC<ThreeYearChartProps> = ({ data, isLoading = false, currentYearPerformance }) => {
-  console.log('[DEBUG] ThreeYearComparisonChart received data:', data)
-  console.log('[DEBUG] Data structure analysis:', data?.map(item => ({
-    year: item.year,
-    rendimiento: item['rendimiento general (%)'],
-    keys: Object.keys(item)
-  })))
-  
-  if (isLoading || !data || data.length === 0) {
-    return (
-      <div className="space-y-4">
-        <div className="h-56 bg-gradient-to-br from-white via-green-50/30 to-white backdrop-blur-sm rounded-2xl border-2 border-green-100/50 p-4 flex items-center justify-center shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="animate-spin w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full"></div>
-            <div className="text-green-700 font-medium">Cargando análisis de rendimiento...</div>
-          </div>
-        </div>
+// ============================================
+// COMPONENTES COMPARTIDOS
+// ============================================
+
+// Estado de carga compartido
+const EstadoCarga = memo(({ mensaje }: { mensaje: string }) => (
+  <div className="h-48 bg-gray-50 rounded-xl border border-gray-100 p-4 flex items-center justify-center">
+    <div className="flex items-center gap-3">
+      <div className="animate-spin w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full" />
+      <span className="text-gray-600 font-medium">{mensaje}</span>
+    </div>
+  </div>
+))
+EstadoCarga.displayName = "EstadoCarga"
+
+// Estado sin datos compartido
+const EstadoVacio = memo(({ mensaje, anio }: { mensaje: string; anio?: number }) => (
+  <div className="h-48 bg-gray-50 rounded-xl border border-gray-100 p-4 flex items-center justify-center">
+    <div className="flex flex-col items-center gap-2 text-center">
+      <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+        <TrendingUp className="h-5 w-5 text-gray-400" />
       </div>
-    )
-  }
+      <div className="text-gray-500 font-medium">{mensaje}</div>
+      {anio && <div className="text-sm text-gray-400">para el año {anio}</div>}
+    </div>
+  </div>
+))
+EstadoVacio.displayName = "EstadoVacio"
 
-  // Separate historical data (last 3 years) from current year (2025)
-  const currentYear = 2025
-  const historicalData = data.filter(item => item.year !== currentYear).map(item => ({
-    year: item.year,
-    rendimiento: item['rendimiento general (%)'] || 0
-  }))
-  
-  // Handle current year data (2025)
-  let currentPerformance = 0
-  let isEstimate = false
-  let currentYearData = null
-  
-  // First, try to use the passed currentYearPerformance parameter
-  if (currentYearPerformance && currentYearPerformance > 0) {
-    currentPerformance = currentYearPerformance
-    isEstimate = false // This is real data, not an estimate
-    console.log(`[DEBUG] Using passed 2025 performance (REAL):`, currentPerformance)
-  } else {
-    // Fallback: try to find 2025 data in the historical array (unlikely but possible)
-    currentYearData = data.find(item => item.year === currentYear)
-    
-    if (currentYearData) {
-      currentPerformance = currentYearData['rendimiento general (%)'] || 0
-      console.log(`[DEBUG] Found direct 2025 data in array:`, currentPerformance)
-    } else {
-      // If no direct data, calculate based on what we know
-      // Since this component is receiving historical data only,
-      // we'll need to calculate or estimate from available context
-      
-      // For now, return 0 and let the parent component pass the correct value
-      currentPerformance = 0
-      isEstimate = true
-      console.log(`[DEBUG] No 2025 data available, needs to be passed from parent`)
-    }
-  }
-  
-  // Create current year data object
-  currentYearData = {
-    year: currentYear,
-    'rendimiento general (%)': currentPerformance,
-    isEstimate: isEstimate
-  }
+// Tooltip personalizado para gráficas
+const TooltipPersonalizado = memo(({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null
 
-  // Combine all data for the bar chart display - include ALL years (last 3 + current 2025)
-  const allYearsData = [...historicalData]
-  if (currentPerformance > 0) {
-    allYearsData.push({ year: currentYear, rendimiento: currentPerformance })
-  }
-  
-  // Also combine for min/max calculations
-  const allPerformanceData = [...allYearsData]
-
-  const maxPerformance = allPerformanceData.length > 0 ? Math.max(...allPerformanceData.map(d => d.rendimiento)) : 0
-  const minPerformance = allPerformanceData.length > 0 ? Math.min(...allPerformanceData.map(d => d.rendimiento)) : 0
-  const avgHistoricalPerformance = historicalData.length > 0 ? Number((historicalData.reduce((sum, d) => sum + d.rendimiento, 0) / historicalData.length).toFixed(1)) : 0
+  const valor = payload[0]?.value || 0
+  const categoria = obtenerCategoria(valor)
 
   return (
-    <motion.div 
-      className="space-y-4"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: "easeOut" }}
-    >
-      {/* Performance Chart */}
-      <motion.div 
-        className="relative h-56 bg-gradient-to-br from-white via-green-50/30 to-white backdrop-blur-sm rounded-2xl border-2 border-green-100/50 p-4 shadow-lg overflow-hidden"
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.7, ease: "easeOut", delay: 0.1 }}
-      >
-        {/* Background decoration */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-green-200/20 to-green-300/10 rounded-full blur-3xl -translate-y-16 translate-x-16" />
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-green-100/30 to-green-200/20 rounded-full blur-2xl translate-y-12 -translate-x-12" />
-        
-        <div className="relative z-10 h-full">
-          <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="h-5 w-5 text-green-600" />
-            <h3 className="font-bold text-green-800 text-sm">Evolución del Rendimiento - Últimos 3 Años</h3>
-          </div>
-          
-          <ResponsiveContainer width="100%" height="75%">
-            <BarChart data={allYearsData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
-              <defs>
-                <linearGradient id="performanceBarGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#34d399" />
-                  <stop offset="50%" stopColor="#10b981" />
-                  <stop offset="100%" stopColor="#059669" />
-                </linearGradient>
-                <linearGradient id="currentYearBarGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#93c5fd" />
-                  <stop offset="50%" stopColor="#60a5fa" />
-                  <stop offset="100%" stopColor="#3b82f6" />
-                </linearGradient>
-              </defs>
-              
-              <CartesianGrid strokeDasharray="3 3" stroke="#10b981" opacity={0.15} />
-              <XAxis 
-                dataKey="year" 
-                stroke="#065f46"
-                tick={{ fontSize: 13, fill: '#065f46', fontWeight: 600 }}
-                tickLine={{ stroke: '#10b981', strokeWidth: 2 }}
-                axisLine={{ stroke: '#10b981', strokeWidth: 2 }}
+    <div className="bg-white border border-gray-200 p-3 rounded-lg shadow-lg">
+      <p className="font-semibold text-gray-800 text-sm mb-1">{label}</p>
+      <div className="flex items-center gap-2">
+        <div className="w-2 h-2 rounded-full bg-green-500" />
+        <span className={`font-bold ${categoria.color}`}>{valor.toFixed(1)}%</span>
+        <span className="text-gray-500 text-xs">({categoria.texto})</span>
+      </div>
+    </div>
+  )
+})
+TooltipPersonalizado.displayName = "TooltipPersonalizado"
+
+// Tarjeta de mes individual
+const TarjetaMes = memo(({
+  mes,
+  porcentaje,
+  subTexto,
+  esActual,
+  esMejor
+}: {
+  mes: string
+  porcentaje: number
+  subTexto?: string
+  esActual: boolean
+  esMejor: boolean
+}) => {
+  const categoria = obtenerCategoria(porcentaje)
+
+  return (
+    <div className={`
+      relative p-3 rounded-lg border text-center transition-colors
+      ${esMejor ? 'bg-green-50 border-green-200' :
+        esActual ? 'bg-gray-50 border-gray-200' :
+          'bg-white border-gray-100'}
+    `}>
+      {esMejor && (
+        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+          <Award className="h-2 w-2 text-white" />
+        </div>
+      )}
+      <div className="text-xs font-medium text-gray-500 mb-1">{mes}</div>
+      <div className={`text-lg font-bold ${categoria.color}`}>
+        {porcentaje.toFixed(1)}%
+      </div>
+      {subTexto && (
+        <div className="text-xs text-gray-400 mt-1">{subTexto}</div>
+      )}
+    </div>
+  )
+})
+TarjetaMes.displayName = "TarjetaMes"
+
+// Contenedor de gráfica con encabezado
+const ContenedorGrafica = memo(({ titulo, children }: { titulo: string; children: React.ReactNode }) => (
+  <div className="bg-white rounded-xl border border-gray-100 p-4">
+    <div className="flex items-center gap-2 mb-4">
+      <TrendingUp className="h-4 w-4 text-green-600" />
+      <h3 className="font-semibold text-gray-800 text-sm">{titulo}</h3>
+    </div>
+    {children}
+  </div>
+))
+ContenedorGrafica.displayName = "ContenedorGrafica"
+
+// ============================================
+// GRÁFICA DE COMPARACIÓN 3 AÑOS
+// ============================================
+
+interface PropsTresAnios {
+  data: any[]
+  isLoading?: boolean
+  currentYearPerformance?: number
+}
+
+export const ThreeYearComparisonChart: React.FC<PropsTresAnios> = memo(({
+  data,
+  isLoading = false,
+  currentYearPerformance
+}) => {
+  const datosProcessados = useMemo(() => {
+    if (!data?.length) return { historico: [], actual: 0, todos: [] }
+
+    const historico = data
+      .filter(item => item.year !== ANIO_ACTUAL)
+      .map(item => ({
+        year: item.year,
+        rendimiento: item['rendimiento general (%)'] || 0
+      }))
+      .sort((a, b) => a.year - b.year)
+
+    const actual = currentYearPerformance ||
+      data.find(item => item.year === ANIO_ACTUAL)?.['rendimiento general (%)'] || 0
+
+    const todos = [...historico]
+    if (actual > 0) {
+      todos.push({ year: ANIO_ACTUAL, rendimiento: actual })
+    }
+
+    return { historico, actual, todos }
+  }, [data, currentYearPerformance])
+
+  if (isLoading) {
+    return <EstadoCarga mensaje="Cargando análisis de rendimiento..." />
+  }
+
+  if (!data?.length) {
+    return <EstadoVacio mensaje="No hay datos disponibles" />
+  }
+
+  const { historico, actual, todos } = datosProcessados
+  const maximo = todos.length > 0 ? Math.max(...todos.map(d => d.rendimiento)) : 0
+  const promedioHistorico = historico.length > 0
+    ? (historico.reduce((sum, d) => sum + d.rendimiento, 0) / historico.length).toFixed(1)
+    : 0
+
+  return (
+    <div className="space-y-4">
+      <ContenedorGrafica titulo={`Evolución del Rendimiento - Últimos ${historico.length} Años`}>
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={todos} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis
+                dataKey="year"
+                tick={{ fontSize: 12, fill: '#6b7280' }}
+                axisLine={{ stroke: '#e5e7eb' }}
               />
-              <YAxis 
-                stroke="#065f46"
-                tick={{ fontSize: 12, fill: '#065f46', fontWeight: 500 }}
-                tickLine={{ stroke: '#10b981', strokeWidth: 2 }}
-                axisLine={{ stroke: '#10b981', strokeWidth: 2 }}
-                domain={[Math.max(0, minPerformance - 10), 100]}
-                label={{ 
-                  value: 'Rendimiento (%)', 
-                  angle: -90, 
-                  position: 'insideLeft', 
-                  style: { textAnchor: 'middle', fontSize: '12px', fill: '#065f46', fontWeight: 600 } 
-                }}
+              <YAxis
+                tick={{ fontSize: 11, fill: '#6b7280' }}
+                axisLine={{ stroke: '#e5e7eb' }}
+                domain={[0, 100]}
               />
-              <Tooltip content={<PerformanceTooltip />} />
-              
-              <Bar 
-                dataKey="rendimiento" 
-                strokeWidth={2}
-                radius={[4, 4, 0, 0]}
-              >
-                {allYearsData.map((entry, index) => (
-                  <Cell 
-                    key={`cell-${index}`} 
-                    fill={entry.year === currentYear ? "url(#currentYearBarGradient)" : "url(#performanceBarGradient)"}
-                    stroke={entry.year === currentYear ? "#3b82f6" : "#10b981"}
+              <Tooltip content={<TooltipPersonalizado />} />
+              <Bar dataKey="rendimiento" radius={[4, 4, 0, 0]}>
+                {todos.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={entry.year === ANIO_ACTUAL ? "#16a34a" : "#10b981"}
                   />
                 ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </motion.div>
+      </ContenedorGrafica>
 
-      {/* Performance Summary Cards - Historical + Current Year */}
-      <motion.div 
-        className="space-y-4"
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut", delay: 0.3 }}
-      >
-        {/* Historical Years (Last 3) */}
-        <div className="grid grid-cols-3 gap-3">
-          {historicalData.map((yearData, index) => {
-            const isHighestHistorical = historicalData.length > 0 && yearData.rendimiento === Math.max(...historicalData.map(d => d.rendimiento))
-            const isLowestHistorical = historicalData.length > 0 && yearData.rendimiento === Math.min(...historicalData.map(d => d.rendimiento))
-            
-            return (
-              <motion.div 
-                key={yearData.year}
-                className={`
-                  relative p-4 rounded-xl border-2 backdrop-blur-sm shadow-lg
-                  ${isHighestHistorical ? 'bg-gradient-to-br from-green-100 via-green-50 to-white border-green-300' : 
-                    isLowestHistorical ? 'bg-gradient-to-br from-red-50 via-white to-white border-red-200' :
-                    'bg-gradient-to-br from-white via-green-50/20 to-white border-green-100'}
-                `}
-                initial={{ opacity: 0, scale: 0.8, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ 
-                  duration: 0.5, 
-                  ease: "easeOut", 
-                  delay: 0.4 + index * 0.1 
-                }}
-                whileHover={{ 
-                  scale: 1.02, 
-                  y: -2,
-                  transition: { duration: 0.2 }
-                }}
-              >
-                {isHighestHistorical && (
-                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center shadow-lg">
-                    <Award className="h-3 w-3 text-white" />
-                  </div>
-                )}
-                
-                <div className="text-center">
-                  <div className={`text-lg font-bold mb-1 ${isHighestHistorical ? 'text-green-800' : 'text-green-700'}`}>
-                    {yearData.year}
-                  </div>
-                  <div className={`text-2xl font-extrabold mb-1 ${
-                    yearData.rendimiento >= 94 ? 'text-green-600' :
-                    yearData.rendimiento >= 90 ? 'text-green-500' :
-                    yearData.rendimiento >= 85 ? 'text-blue-500' :
-                    yearData.rendimiento >= 60 ? 'text-yellow-600' : 'text-red-500'
-                  }`}>
-                    {yearData.rendimiento.toFixed(1)}%
-                  </div>
-                  <div className={`text-xs font-medium ${
-                    yearData.rendimiento >= 94 ? 'text-green-600' :
-                    yearData.rendimiento >= 90 ? 'text-green-500' :
-                    yearData.rendimiento >= 85 ? 'text-blue-500' :
-                    yearData.rendimiento >= 60 ? 'text-yellow-600' : 'text-red-500'
-                  }`}>
-                    {yearData.rendimiento >= 94 ? 'Oro' :
-                     yearData.rendimiento >= 90 ? 'Plata' :
-                     yearData.rendimiento >= 85 ? 'Bronce' :
-                     yearData.rendimiento >= 60 ? 'Mejorar' : 'Taller Conciencia'}
-                  </div>
+      {/* Tarjetas de años históricos */}
+      <div className="grid grid-cols-3 gap-3">
+        {historico.map((yearData) => {
+          const esMejor = yearData.rendimiento === maximo
+          const categoria = obtenerCategoria(yearData.rendimiento)
+
+          return (
+            <div
+              key={yearData.year}
+              className={`p-4 rounded-xl border text-center ${esMejor ? 'bg-green-50 border-green-200' : 'bg-white border-gray-100'
+                }`}
+            >
+              {esMejor && (
+                <div className="flex justify-center mb-2">
+                  <Award className="h-4 w-4 text-green-600" />
                 </div>
-              </motion.div>
-            )
-          })}
-        </div>
-
-        {/* Divisor with Current Year Label */}
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t-2 border-dashed border-green-300"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 rounded-full font-bold shadow-lg">
-              AÑO ACTUAL - 2025
-            </span>
-          </div>
-        </div>
-
-        {/* Current Year 2025 - Always Show */}
-        <div className="flex justify-center">
-          <motion.div 
-            className="relative p-6 rounded-2xl border-3 backdrop-blur-sm shadow-2xl bg-gradient-to-br from-green-50 via-white to-green-50 border-green-400 min-w-[300px] max-w-[400px]"
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ 
-              duration: 0.7, 
-              ease: "easeOut", 
-              delay: 0.7 
-            }}
-            whileHover={{ 
-              scale: 1.03, 
-              y: -4,
-              transition: { duration: 0.2 }
-            }}
-          >
-            {/* Crown for highest overall performance */}
-            {currentPerformance > 0 && currentPerformance === maxPerformance && (
-              <div className="absolute -top-4 -right-4 w-8 h-8 bg-gradient-to-r from-yellow-400 to-yellow-500 rounded-full flex items-center justify-center shadow-xl">
-                <Award className="h-4 w-4 text-white" />
+              )}
+              <div className="text-lg font-bold text-gray-800">{yearData.year}</div>
+              <div className={`text-2xl font-bold ${categoria.color}`}>
+                {yearData.rendimiento.toFixed(1)}%
               </div>
-            )}
-            
-            <div className="text-center">
-              <div className="text-3xl font-bold mb-2 text-green-800">
-                {currentYear}
-                {(currentYearData?.isEstimate || isEstimate) && (
-                  <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full ml-2">
-                    Est.
-                  </span>
-                )}
-              </div>
-              <div className={`text-5xl font-extrabold mb-3 ${
-                currentPerformance >= 94 ? 'text-green-600' :
-                currentPerformance >= 90 ? 'text-green-500' :
-                currentPerformance >= 85 ? 'text-blue-500' :
-                currentPerformance >= 60 ? 'text-yellow-600' : 
-                currentPerformance > 0 ? 'text-red-500' : 'text-gray-500'
-              }`}>
-                {currentPerformance > 0 ? `${currentPerformance.toFixed(1)}%` : 'N/A'}
-              </div>
-              <div className={`text-sm font-bold mb-3 ${
-                currentPerformance >= 94 ? 'text-green-600' :
-                currentPerformance >= 90 ? 'text-green-500' :
-                currentPerformance >= 85 ? 'text-blue-500' :
-                currentPerformance >= 60 ? 'text-yellow-600' : 
-                currentPerformance > 0 ? 'text-red-500' : 'text-gray-500'
-              }`}>
-                {currentPerformance >= 94 ? 'ORO' :
-                 currentPerformance >= 90 ? 'PLATA' :
-                 currentPerformance >= 85 ? 'BRONCE' :
-                 currentPerformance >= 60 ? 'MEJORAR' : 
-                 currentPerformance > 0 ? 'TALLER CONCIENCIA' : 'INICIANDO AÑO'}
-                {(currentYearData?.isEstimate || isEstimate) && (
-                  <div className="text-xs text-yellow-600 mt-1">
-                    Basado en tendencia
-                  </div>
-                )}
+              <div className={`text-xs font-medium ${categoria.color}`}>
+                {categoria.texto}
               </div>
             </div>
-          </motion.div>
-        </div>
-      </motion.div>
-    </motion.div>
-  )
-}
-
-// Monthly Performance Chart Component
-interface MonthlyChartProps {
-  data: any[]
-  year: number
-  isLoading?: boolean
-}
-
-export const MonthlyPerformanceChart: React.FC<MonthlyChartProps> = ({ data, year, isLoading = false }) => {
-  console.log('[DEBUG] MonthlyPerformanceChart received data:', data)
-  
-  if (isLoading || !data || data.length === 0) {
-    return (
-      <div className="space-y-4">
-        <div className="h-56 bg-gradient-to-br from-white via-green-50/30 to-white backdrop-blur-sm rounded-2xl border-2 border-green-100/50 p-4 flex items-center justify-center shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="animate-spin w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full"></div>
-            <div className="text-green-700 font-medium">Cargando análisis mensual...</div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-  const monthlyData = months.map((month, index) => {
-    const monthData = data.find(item => item.month === index + 1)
-    const hasData = !!monthData
-    let performance = 0
-    
-    // Debug: Log the actual data structure for February
-    if (index + 1 === 2) {
-      console.log(`[DEBUG] February monthData structure:`, monthData)
-      console.log(`[DEBUG] February monthData keys:`, monthData ? Object.keys(monthData) : 'null')
-    }
-    
-    if (hasData) {
-      // Calculate monthly performance based on km and bonus efficiency
-      let kmPercentage = 0
-      let bonusPercentage = 0 // Start with 0, use calculated values from data
-      
-      // Calculate KM efficiency
-      if (monthData.valor_programacion && monthData.valor_programacion > 0) {
-        kmPercentage = Number(((monthData.valor_ejecucion / monthData.valor_programacion) * 100).toFixed(1))
-      }
-      
-      // PRIORITY 1: Calculate from finalBonus and baseBonus (most accurate)
-      if (monthData.baseBonus && monthData.baseBonus > 0 && monthData.finalBonus !== undefined) {
-        bonusPercentage = Number(((monthData.finalBonus / monthData.baseBonus) * 100).toFixed(1))
-        console.log(`[DEBUG] Month ${month}: Calculated from finalBonus(${monthData.finalBonus})/baseBonus(${monthData.baseBonus})=${bonusPercentage}%`)
-      }
-      // PRIORITY 2: Use porcentaje if available  
-      else if (monthData.porcentaje !== undefined) {
-        bonusPercentage = monthData.porcentaje
-        console.log(`[DEBUG] Month ${month}: Using porcentaje=${monthData.porcentaje}`)
-      } 
-      // PRIORITY 3: Use bonusPercentage (least reliable, often incorrect)
-      else if (monthData.bonusPercentage !== undefined) {
-        bonusPercentage = monthData.bonusPercentage
-        console.log(`[DEBUG] Month ${month}: Using bonusPercentage=${monthData.bonusPercentage}`)
-      } 
-      // FALLBACK: Default logic
-      else if (typeof monthData.finalBonus === 'number') {
-        bonusPercentage = monthData.finalBonus > 0 ? 100 : 0;
-        console.log(`[DEBUG] Month ${month}: Using finalBonus fallback=${bonusPercentage}`)
-      }
-      
-      // Debug log
-      console.log(`[DEBUG] Month ${month} (${monthData.month}): kmPercentage=${kmPercentage}, bonusPercentage=${bonusPercentage}`)
-      
-      // Combined performance (average of both metrics)
-      performance = Number(((kmPercentage + bonusPercentage) / 2).toFixed(1))
-      
-      console.log(`[DEBUG] Month ${month} (${monthData.month}): Final performance=${performance}`)
-    }
-    
-    return {
-      month,
-      monthNumber: index + 1,
-      rendimiento: hasData ? performance : 0, // Set to 0 when no data
-      hasData
-    }
-  })
-
-  console.log('[DEBUG] Processed monthlyData:', monthlyData)
-
-  const currentMonth = new Date().getMonth() + 1
-  const maxPerformance = Math.max(...monthlyData.filter(d => d.hasData).map(d => d.rendimiento))
-  const minPerformance = Math.min(...monthlyData.filter(d => d.hasData).map(d => d.rendimiento))
-  const avgPerformance = Number((
-    monthlyData
-      .filter(d => d.hasData)
-      .reduce((sum, d) => sum + d.rendimiento, 0) / 
-    monthlyData.filter(d => d.hasData).length
-  ).toFixed(1))
-
-  return (
-    <motion.div 
-      className="space-y-4"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: "easeOut" }}
-    >
-      {/* Monthly Performance Chart */}
-      <motion.div 
-        className="relative h-56 bg-gradient-to-br from-white via-green-50/30 to-white backdrop-blur-sm rounded-2xl border-2 border-green-100/50 p-4 shadow-lg overflow-hidden"
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.7, ease: "easeOut", delay: 0.1 }}
-      >
-        {/* Background decoration */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-green-200/20 to-green-300/10 rounded-full blur-3xl -translate-y-16 translate-x-16" />
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-green-100/30 to-green-200/20 rounded-full blur-2xl translate-y-12 -translate-x-12" />
-        
-        <div className="relative z-10 h-full">
-          <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="h-5 w-5 text-green-600" />
-            <h3 className="font-bold text-green-800 text-sm">Rendimiento Mensual {year}</h3>
-          </div>
-          
-          <ResponsiveContainer width="100%" height="75%">
-            <BarChart data={monthlyData.filter(d => d.hasData)} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
-              <defs>
-                <linearGradient id="monthlyBarGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#34d399" />
-                  <stop offset="50%" stopColor="#10b981" />
-                  <stop offset="100%" stopColor="#059669" />
-                </linearGradient>
-              </defs>
-              
-              <CartesianGrid strokeDasharray="3 3" stroke="#10b981" opacity={0.15} />
-              <XAxis 
-                dataKey="month" 
-                stroke="#065f46"
-                tick={{ fontSize: 11, fill: '#065f46', fontWeight: 600 }}
-                tickLine={{ stroke: '#10b981', strokeWidth: 2 }}
-                axisLine={{ stroke: '#10b981', strokeWidth: 2 }}
-              />
-              <YAxis 
-                stroke="#065f46"
-                tick={{ fontSize: 12, fill: '#065f46', fontWeight: 500 }}
-                tickLine={{ stroke: '#10b981', strokeWidth: 2 }}
-                axisLine={{ stroke: '#10b981', strokeWidth: 2 }}
-                domain={[0, 100]}
-                label={{ 
-                  value: 'Rendimiento (%)', 
-                  angle: -90, 
-                  position: 'insideLeft', 
-                  style: { textAnchor: 'middle', fontSize: '12px', fill: '#065f46', fontWeight: 600 } 
-                }}
-              />
-              <Tooltip content={<PerformanceTooltip />} />
-              
-              <Bar 
-                dataKey="rendimiento" 
-                fill="url(#monthlyBarGradient)"
-                stroke="#10b981"
-                strokeWidth={2}
-                radius={[4, 4, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </motion.div>
-
-      {/* Monthly Summary Grid */}
-      <motion.div 
-        className="grid grid-cols-4 gap-2"
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut", delay: 0.3 }}
-      >
-        {monthlyData.filter(d => d.hasData).map((monthData, index) => {
-          const isCurrentMonth = monthData.monthNumber === currentMonth
-          const isHighest = monthData.hasData && monthData.rendimiento === Math.max(...monthlyData.filter(d => d.hasData).map(d => d.rendimiento))
-          
-          return (
-            <motion.div 
-              key={monthData.month}
-              className={`
-                relative p-2 rounded-lg border backdrop-blur-sm shadow text-center
-                ${!monthData.hasData ? 'bg-gray-50 border-gray-200 opacity-50' :
-                  isHighest ? 'bg-gradient-to-br from-green-100 via-green-50 to-white border-green-300' : 
-                  isCurrentMonth ? 'bg-gradient-to-br from-green-50 via-white to-white border-green-200' :
-                  'bg-gradient-to-br from-white via-green-50/20 to-white border-green-100'}
-              `}
-              initial={{ opacity: 0, scale: 0.8, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ 
-                duration: 0.4, 
-                ease: "easeOut", 
-                delay: 0.4 + index * 0.05 
-              }}
-              whileHover={{ 
-                scale: 1.05, 
-                y: -2,
-                transition: { duration: 0.2 }
-              }}
-            >
-              {isHighest && monthData.hasData && (
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center shadow">
-                  <Award className="h-2 w-2 text-white" />
-                </div>
-              )}
-              
-              <div className="text-xs font-medium text-green-700 mb-1">{monthData.month}</div>
-              
-              {monthData.hasData ? (
-                <>
-                  <div className={`text-lg font-bold mb-1 ${
-                    monthData.rendimiento >= 94 ? 'text-green-600' :
-                    monthData.rendimiento >= 90 ? 'text-green-500' :
-                    monthData.rendimiento >= 85 ? 'text-blue-500' :
-                    monthData.rendimiento >= 60 ? 'text-yellow-600' : 'text-red-500'
-                  }`}>
-                    {monthData.rendimiento.toFixed(1)}%
-                  </div>
-                  <div className={`text-xs ${
-                    monthData.rendimiento >= 94 ? 'text-green-600' :
-                    monthData.rendimiento >= 90 ? 'text-green-500' :
-                    monthData.rendimiento >= 85 ? 'text-blue-500' :
-                    monthData.rendimiento >= 60 ? 'text-yellow-600' : 'text-red-500'
-                  }`}>
-                    {monthData.rendimiento >= 94 ? 'Oro' :
-                     monthData.rendimiento >= 90 ? 'Plata' :
-                     monthData.rendimiento >= 85 ? 'Bronce' :
-                     monthData.rendimiento >= 60 ? 'Mejorar' : 'Taller Conc.'}
-                  </div>
-                </>
-              ) : (
-                <div className="text-gray-400 text-xs">Sin datos</div>
-              )}
-            </motion.div>
           )
         })}
-      </motion.div>
+      </div>
 
-      {/* Monthly Summary Stats */}
-      <motion.div 
-        className="bg-gradient-to-r from-green-50/80 via-white/60 to-green-50/80 backdrop-blur-sm rounded-xl p-4 border-2 border-green-100/50 shadow-lg"
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut", delay: 0.5 }}
-      >
-        <div className="flex items-center justify-between text-sm mb-2">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-green-600" />
-            <span className="font-semibold text-green-800">Promedio del año:</span>
+      {/* Año actual destacado */}
+      {actual > 0 && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
+          <div className="text-sm text-green-600 font-medium mb-1">Año Actual</div>
+          <div className="text-2xl font-bold text-gray-800">{ANIO_ACTUAL}</div>
+          <div className={`text-4xl font-bold ${obtenerCategoria(actual).color} my-2`}>
+            {actual.toFixed(1)}%
           </div>
-          <span className="font-bold text-green-700 text-lg">{avgPerformance}%</span>
-        </div>
-        <div className="flex justify-between text-xs text-green-600/80">
-          <span>Meses con datos: {monthlyData.filter(d => d.hasData).length}/12</span>
-          <span>Máximo: {maxPerformance}% | Mínimo: {minPerformance}%</span>
-        </div>
-      </motion.div>
-    </motion.div>
-  )
-}
-
-// Kilometers Monthly Chart Component
-interface KilometersChartProps {
-  data: any[]
-  year: number
-  isLoading?: boolean
-}
-
-export const KilometersMonthlyChart: React.FC<KilometersChartProps> = ({ data, year, isLoading = false }) => {
-  if (isLoading || !data || data.length === 0) {
-    return (
-      <div className="space-y-4">
-        <div className="h-56 bg-gradient-to-br from-white via-green-50/30 to-white backdrop-blur-sm rounded-2xl border-2 border-green-100/50 p-4 flex items-center justify-center shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="animate-spin w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full"></div>
-            <div className="text-green-700 font-medium">Cargando análisis de kilómetros...</div>
+          <div className={`text-sm font-medium ${obtenerCategoria(actual).color}`}>
+            {obtenerCategoria(actual).texto.toUpperCase()}
           </div>
+        </div>
+      )}
+
+      {/* Resumen */}
+      <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+        <div className="flex justify-between items-center text-sm">
+          <span className="text-gray-600">Promedio histórico:</span>
+          <span className="font-bold text-gray-800">{promedioHistorico}%</span>
         </div>
       </div>
-    )
-  }
-
-  // Prepare monthly data - create array for all 12 months
-  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-  const monthlyData = months.map((month, index) => {
-    const monthData = data.find(item => item.month === index + 1)
-    const porcentaje = monthData?.valor_programacion > 0 ? 
-      Number(((monthData.valor_ejecucion / monthData.valor_programacion) * 100).toFixed(1)) : 0
-    
-    return {
-      month,
-      monthNumber: index + 1,
-      ejecutado: monthData?.valor_ejecucion || 0,
-      programado: monthData?.valor_programacion || 0,
-      porcentaje: porcentaje,
-      hasData: !!monthData
-    }
-  })
-
-  const currentMonth = new Date().getMonth() + 1
-  const maxPorcentaje = Math.max(...monthlyData.filter(d => d.hasData).map(d => d.porcentaje))
-  const minPorcentaje = Math.min(...monthlyData.filter(d => d.hasData).map(d => d.porcentaje))
-  const totalEjecutado = monthlyData.filter(d => d.hasData).reduce((sum, d) => sum + d.ejecutado, 0)
-  const totalProgramado = monthlyData.filter(d => d.hasData).reduce((sum, d) => sum + d.programado, 0)
-  const avgPercentage = totalProgramado > 0 ? Math.round((totalEjecutado / totalProgramado) * 100) : 0
-
-  return (
-    <motion.div 
-      className="space-y-4"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: "easeOut" }}
-    >
-      {/* Kilometers Chart */}
-      <motion.div 
-        className="relative h-64 bg-gradient-to-br from-white via-green-50/30 to-white backdrop-blur-sm rounded-2xl border-2 border-green-100/50 p-4 shadow-lg overflow-hidden"
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.7, ease: "easeOut", delay: 0.1 }}
-      >
-        {/* Background decoration */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-green-200/20 to-green-300/10 rounded-full blur-3xl -translate-y-16 translate-x-16" />
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-green-100/30 to-green-200/20 rounded-full blur-2xl translate-y-12 -translate-x-12" />
-        
-        <div className="relative z-10 h-full">
-          <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="h-5 w-5 text-green-600" />
-            <h3 className="font-bold text-green-800 text-sm">Rendimiento Kilómetros {year}</h3>
-          </div>
-          
-          <ResponsiveContainer width="100%" height="75%">
-            <BarChart data={monthlyData.filter(d => d.hasData)} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
-              <defs>
-                <linearGradient id="kmBarGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#34d399" />
-                  <stop offset="50%" stopColor="#10b981" />
-                  <stop offset="100%" stopColor="#059669" />
-                </linearGradient>
-              </defs>
-              
-              <CartesianGrid strokeDasharray="3 3" stroke="#10b981" opacity={0.15} />
-              <XAxis 
-                dataKey="month" 
-                stroke="#065f46"
-                tick={{ fontSize: 11, fill: '#065f46', fontWeight: 600 }}
-                tickLine={{ stroke: '#10b981', strokeWidth: 2 }}
-                axisLine={{ stroke: '#10b981', strokeWidth: 2 }}
-              />
-              <YAxis 
-                domain={[0, 120]}
-                stroke="#065f46"
-                tick={{ fontSize: 12, fill: '#065f46', fontWeight: 500 }}
-                tickLine={{ stroke: '#10b981', strokeWidth: 2 }}
-                axisLine={{ stroke: '#10b981', strokeWidth: 2 }}
-                label={{ 
-                  value: 'Rendimiento (%)', 
-                  angle: -90, 
-                  position: 'insideLeft', 
-                  style: { textAnchor: 'middle', fontSize: '12px', fill: '#065f46', fontWeight: 600 } 
-                }}
-              />
-              <Tooltip 
-                formatter={(value: number) => [`${value}%`, 'Rendimiento']}
-                labelFormatter={(label) => `${label}`}
-                contentStyle={{
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(240,253,244,0.8) 100%)',
-                  border: '2px solid rgba(16,185,129,0.3)',
-                  borderRadius: '12px',
-                  backdropFilter: 'blur(8px)',
-                  fontSize: '14px',
-                  fontWeight: '500'
-                }}
-              />
-              
-              <Bar 
-                dataKey="porcentaje" 
-                fill="url(#kmBarGradient)"
-                stroke="#10b981"
-                strokeWidth={2}
-                radius={[4, 4, 0, 0]}
-                name="Rendimiento"
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </motion.div>
-
-      {/* Monthly Summary Grid */}
-      <motion.div 
-        className="grid grid-cols-4 gap-2"
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut", delay: 0.3 }}
-      >
-        {monthlyData.filter(d => d.hasData).map((monthData, index) => {
-          const isCurrentMonth = monthData.monthNumber === currentMonth
-          const isHighest = monthData.hasData && monthData.porcentaje === maxPorcentaje
-          
-          return (
-            <motion.div 
-              key={monthData.month}
-              className={`
-                relative p-2 rounded-lg border backdrop-blur-sm shadow text-center
-                ${!monthData.hasData ? 'bg-gray-50 border-gray-200 opacity-50' :
-                  isHighest ? 'bg-gradient-to-br from-green-100 via-green-50 to-white border-green-300' : 
-                  isCurrentMonth ? 'bg-gradient-to-br from-green-50 via-white to-white border-green-200' :
-                  'bg-gradient-to-br from-white via-green-50/20 to-white border-green-100'}
-              `}
-              initial={{ opacity: 0, scale: 0.8, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ 
-                duration: 0.4, 
-                ease: "easeOut", 
-                delay: 0.4 + index * 0.05 
-              }}
-              whileHover={monthData.hasData ? { 
-                scale: 1.05, 
-                y: -2,
-                transition: { duration: 0.2 }
-              } : {}}
-            >
-              {isHighest && monthData.hasData && (
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center shadow">
-                  <Award className="h-2 w-2 text-white" />
-                </div>
-              )}
-              
-              <div className="text-xs font-medium text-green-700 mb-1">{monthData.month}</div>
-              
-              {monthData.hasData ? (
-                <>
-                  <div className="text-lg font-bold text-green-700 mb-1">
-                      {monthData.porcentaje.toFixed(1)}%
-                  </div>
-                  <div className="text-xs text-green-600/70">
-                    {(monthData.ejecutado / 1000).toFixed(1)}K km
-                  </div>
-                </>
-              ) : (
-                <div className="text-gray-400 text-xs">Sin datos</div>
-              )}
-            </motion.div>
-          )
-        })}
-      </motion.div>
-    </motion.div>
+    </div>
   )
-}
+})
 
-// Bonus Monthly Chart Component
-interface BonusChartProps {
+ThreeYearComparisonChart.displayName = "ThreeYearComparisonChart"
+
+// ============================================
+// GRÁFICA DE RENDIMIENTO MENSUAL
+// ============================================
+
+interface PropsMensual {
   data: any[]
   year: number
   isLoading?: boolean
 }
 
-export const BonusMonthlyChart: React.FC<BonusChartProps> = ({ data, year, isLoading = false }) => {
-  console.log("[DEBUG] BonusMonthlyChart received:", { data, year, isLoading, dataLength: data?.length })
-  
-  // Check if we're loading OR if there's no meaningful data
-  const hasValidData = data && Array.isArray(data) && data.length > 0
-  
+export const MonthlyPerformanceChart: React.FC<PropsMensual> = memo(({ data, year, isLoading = false }) => {
+  const datosMensuales = useMemo(() => {
+    if (!data?.length) return []
+
+    return MESES.map((mes, index) => {
+      const mesData = data.find(item => item.month === index + 1)
+      if (!mesData) return null
+
+      let kmPorcentaje = 0
+      let bonoPorcentaje = 0
+
+      if (mesData.valor_programacion > 0) {
+        kmPorcentaje = (mesData.valor_ejecucion / mesData.valor_programacion) * 100
+      }
+
+      if (mesData.baseBonus > 0 && mesData.finalBonus !== undefined) {
+        bonoPorcentaje = (mesData.finalBonus / mesData.baseBonus) * 100
+      } else if (mesData.porcentaje !== undefined) {
+        bonoPorcentaje = mesData.porcentaje
+      }
+
+      const rendimiento = (kmPorcentaje + bonoPorcentaje) / 2
+
+      return {
+        mes,
+        mesNumero: index + 1,
+        rendimiento: Number(rendimiento.toFixed(1))
+      }
+    }).filter(Boolean) as { mes: string; mesNumero: number; rendimiento: number }[]
+  }, [data])
+
   if (isLoading) {
-    console.log("[DEBUG] BonusMonthlyChart showing loading state - isLoading true")
-    return (
-      <div className="space-y-4">
-        <div className="h-56 bg-gradient-to-br from-white via-green-50/30 to-white backdrop-blur-sm rounded-2xl border-2 border-green-100/50 p-4 flex items-center justify-center shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="animate-spin w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full"></div>
-            <div className="text-green-700 font-medium">Cargando análisis de bonificaciones...</div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-  
-  if (!hasValidData) {
-    console.log("[DEBUG] BonusMonthlyChart showing empty state - no valid data")
-    return (
-      <div className="space-y-4">
-        <div className="h-56 bg-gradient-to-br from-white via-green-50/30 to-white backdrop-blur-sm rounded-2xl border-2 border-green-100/50 p-4 flex items-center justify-center shadow-lg">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-              <TrendingUp className="h-6 w-6 text-green-600" />
-            </div>
-            <div className="text-green-700 font-medium text-center">
-              <div>No hay datos de bonificaciones</div>
-              <div className="text-sm text-green-600 opacity-75 mt-1">para el año {year}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
+    return <EstadoCarga mensaje="Cargando análisis mensual..." />
   }
 
-  // Prepare monthly data - create array for all 12 months
-  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago']
-  const monthlyData = months.map((month, index) => {
-    const monthNumber = index + 1
-    const monthData = data.find(item => 
-      item.month === monthNumber || 
-      item.monthNumber === monthNumber
-    )
-    
-    // Handle different data structure possibilities
-    const bonusValue = monthData?.bonusValue || monthData?.baseBonus || 0
-    const finalValue = monthData?.finalValue || monthData?.finalBonus || 0
-    
-    // Calculate percentage safely - only if we have REAL bonus data
-    let porcentaje = 0
-    if (bonusValue > 0) {
-      porcentaje = Number(((finalValue / bonusValue) * 100).toFixed(1))
-    }
-    // Don't assume 100% for months without real data
-    
-    // Smart validation: Only consider hasData if we have meaningful bonus values AND it's not a future month
-    const currentDate = new Date()
-    const currentYear = currentDate.getFullYear()
-    const currentMonth = currentDate.getMonth() + 1  // JavaScript months are 0-based
-    
-    const isCurrentOrPastMonth = year < currentYear || (year === currentYear && monthNumber <= currentMonth)
-    const hasData = !!monthData && bonusValue > 0 && isCurrentOrPastMonth
-    
-    // Debug log for problematic months
-    if (monthNumber >= 9) {  // Sep, Oct, Nov, Dic
-      console.log(`[DEBUG] BonusMonthlyChart ${month} (${monthNumber}):`, {
-        monthData: !!monthData,
-        bonusValue,
-        finalValue,
-        porcentaje,
-        isCurrentOrPastMonth,
-        hasData
-      })
-    }
-    
-    return {
-      month,
-      monthNumber,
-      bonusValue: Math.max(0, bonusValue),
-      finalValue: Math.max(0, finalValue),
-      porcentaje: Math.max(0, Math.min(100, porcentaje)), // Clamp between 0-100
-      hasData
-    }
-  })
-  
-  console.log("[DEBUG] Processed monthlyData:", monthlyData)
+  if (!datosMensuales.length) {
+    return <EstadoVacio mensaje="No hay datos mensuales" anio={year} />
+  }
 
-  const currentMonth = new Date().getMonth() + 1
-  const dataWithValues = monthlyData.filter(d => d.hasData)
-  const maxPorcentaje = dataWithValues.length > 0 ? Math.max(...dataWithValues.map(d => d.porcentaje)) : 0
-  const minPorcentaje = dataWithValues.length > 0 ? Math.min(...dataWithValues.map(d => d.porcentaje)) : 0
-  const totalBonusValue = dataWithValues.reduce((sum, d) => sum + d.bonusValue, 0)
-  const totalFinalValue = dataWithValues.reduce((sum, d) => sum + d.finalValue, 0)
-  const avgPercentage = totalBonusValue > 0 ? Math.round((totalFinalValue / totalBonusValue) * 100) : 0
+  const maximo = Math.max(...datosMensuales.map(d => d.rendimiento))
+  const promedio = (datosMensuales.reduce((sum, d) => sum + d.rendimiento, 0) / datosMensuales.length).toFixed(1)
 
   return (
-    <motion.div 
-      className="space-y-4"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: "easeOut" }}
-    >
-      {/* Bonus Chart */}
-      <motion.div 
-        className="relative h-64 bg-gradient-to-br from-white via-green-50/30 to-white backdrop-blur-sm rounded-2xl border-2 border-green-100/50 p-4 shadow-lg overflow-hidden"
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.7, ease: "easeOut", delay: 0.1 }}
-      >
-        {/* Background decoration */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-green-200/20 to-green-300/10 rounded-full blur-3xl -translate-y-16 translate-x-16" />
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-green-100/30 to-green-200/20 rounded-full blur-2xl translate-y-12 -translate-x-12" />
-        
-        <div className="relative z-10 h-full">
-          <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="h-5 w-5 text-green-600" />
-            <h3 className="font-bold text-green-800 text-sm">Rendimiento Bonificaciones {year}</h3>
-          </div>
-          
-          <ResponsiveContainer width="100%" height="75%">
-            <BarChart data={monthlyData.filter(d => d.hasData)} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
-              <defs>
-                <linearGradient id="bonusBarGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#34d399" />
-                  <stop offset="50%" stopColor="#10b981" />
-                  <stop offset="100%" stopColor="#059669" />
-                </linearGradient>
-              </defs>
-              
-              <CartesianGrid strokeDasharray="3 3" stroke="#10b981" opacity={0.15} />
-              <XAxis 
-                dataKey="month" 
-                stroke="#065f46"
-                tick={{ fontSize: 11, fill: '#065f46', fontWeight: 600 }}
-                tickLine={{ stroke: '#10b981', strokeWidth: 2 }}
-                axisLine={{ stroke: '#10b981', strokeWidth: 2 }}
+    <div className="space-y-4">
+      <ContenedorGrafica titulo={`Rendimiento Mensual ${year}`}>
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={datosMensuales} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis
+                dataKey="mes"
+                tick={{ fontSize: 10, fill: '#6b7280' }}
+                axisLine={{ stroke: '#e5e7eb' }}
               />
-              <YAxis 
-                domain={[0, 120]}
-                stroke="#065f46"
-                tick={{ fontSize: 12, fill: '#065f46', fontWeight: 500 }}
-                tickLine={{ stroke: '#10b981', strokeWidth: 2 }}
-                axisLine={{ stroke: '#10b981', strokeWidth: 2 }}
-                label={{ 
-                  value: 'Bonificación (%)', 
-                  angle: -90, 
-                  position: 'insideLeft', 
-                  style: { textAnchor: 'middle', fontSize: '12px', fill: '#065f46', fontWeight: 600 } 
-                }}
+              <YAxis
+                tick={{ fontSize: 11, fill: '#6b7280' }}
+                axisLine={{ stroke: '#e5e7eb' }}
+                domain={[0, 100]}
               />
-              <Tooltip 
-                formatter={(value: number) => [`${value}%`, 'Bonificación']}
-                labelFormatter={(label) => `${label}`}
-                contentStyle={{
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(240,253,244,0.8) 100%)',
-                  border: '2px solid rgba(16,185,129,0.3)',
-                  borderRadius: '12px',
-                  backdropFilter: 'blur(8px)',
-                  fontSize: '14px',
-                  fontWeight: '500'
-                }}
-              />
-              
-              <Bar 
-                dataKey="porcentaje" 
-                fill="url(#bonusBarGradient)"
-                stroke="#10b981"
-                strokeWidth={2}
-                radius={[4, 4, 0, 0]}
-                name="Bonificación"
-              />
+              <Tooltip content={<TooltipPersonalizado />} />
+              <Bar dataKey="rendimiento" fill="#10b981" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </motion.div>
+      </ContenedorGrafica>
 
-      {/* Monthly Summary Grid */}
-      <motion.div 
-        className="grid grid-cols-4 gap-2"
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut", delay: 0.3 }}
-      >
-        {monthlyData.filter(d => d.hasData).map((monthData, index) => {
-          const isCurrentMonth = monthData.monthNumber === currentMonth
-          const isHighest = monthData.hasData && monthData.porcentaje === maxPorcentaje
-          
-          return (
-            <motion.div 
-              key={monthData.month}
-              className={`
-                relative p-2 rounded-lg border backdrop-blur-sm shadow text-center
-                ${!monthData.hasData ? 'bg-gray-50 border-gray-200 opacity-50' :
-                  isHighest ? 'bg-gradient-to-br from-green-100 via-green-50 to-white border-green-300' : 
-                  isCurrentMonth ? 'bg-gradient-to-br from-green-50 via-white to-white border-green-200' :
-                  'bg-gradient-to-br from-white via-green-50/20 to-white border-green-100'}
-              `}
-              initial={{ opacity: 0, scale: 0.8, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ 
-                duration: 0.4, 
-                ease: "easeOut", 
-                delay: 0.4 + index * 0.05 
-              }}
-              whileHover={monthData.hasData ? { 
-                scale: 1.05, 
-                y: -2,
-                transition: { duration: 0.2 }
-              } : {}}
-            >
-              {isHighest && monthData.hasData && (
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center shadow">
-                  <Award className="h-2 w-2 text-white" />
-                </div>
-              )}
-              
-              <div className="text-xs font-medium text-green-700 mb-1">{monthData.month}</div>
-              
-              {monthData.hasData ? (
-                <>
-                  <div className="text-lg font-bold text-green-700 mb-1">
-                      {monthData.porcentaje.toFixed(1)}%
-                  </div>
-                  <div className="text-xs text-green-600/70">
-                    ${(monthData.finalValue / 1000).toFixed(1)}K
-                  </div>
-                </>
-              ) : (
-                <div className="text-gray-400 text-xs">Sin datos</div>
-              )}
-            </motion.div>
-          )
-        })}
-      </motion.div>
+      {/* Grid de meses */}
+      <div className="grid grid-cols-4 gap-2">
+        {datosMensuales.map((d) => (
+          <TarjetaMes
+            key={d.mes}
+            mes={d.mes}
+            porcentaje={d.rendimiento}
+            esActual={d.mesNumero === MES_ACTUAL}
+            esMejor={d.rendimiento === maximo}
+          />
+        ))}
+      </div>
 
-      {/* Bonus Summary Stats */}
-      <motion.div 
-        className="bg-gradient-to-r from-green-50/80 via-white/60 to-green-50/80 backdrop-blur-sm rounded-xl p-4 border-2 border-green-100/50 shadow-lg"
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut", delay: 0.5 }}
-      >
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="h-4 w-4 text-green-600" />
-              <span className="font-semibold text-green-800 text-sm">Total Bonificado:</span>
-            </div>
-            <div className="text-lg font-bold text-green-700">${totalFinalValue.toLocaleString()}</div>
-          </div>
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="font-semibold text-green-800 text-sm">Eficiencia:</span>
-            </div>
-            <div className="text-lg font-bold text-green-700">{avgPercentage}%</div>
-          </div>
+      {/* Resumen */}
+      <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+        <div className="flex justify-between items-center text-sm">
+          <span className="text-gray-600">Promedio del año:</span>
+          <span className="font-bold text-gray-800">{promedio}%</span>
         </div>
-        <div className="mt-3 pt-3 border-t border-green-100 flex justify-between text-xs text-green-600/80">
-          <span>Meses con datos: {dataWithValues.length}/12</span>
-          {dataWithValues.length > 0 && (
-            <span>Máximo: {maxPorcentaje}% | Mínimo: {minPorcentaje}%</span>
-          )}
+        <div className="flex justify-between items-center text-xs text-gray-500 mt-2">
+          <span>Meses con datos: {datosMensuales.length}/12</span>
+          <span>Máximo: {maximo}%</span>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   )
-}
+})
+
+MonthlyPerformanceChart.displayName = "MonthlyPerformanceChart"
+
+// ============================================
+// GRÁFICA DE KILÓMETROS MENSUALES
+// ============================================
+
+export const KilometersMonthlyChart: React.FC<PropsMensual> = memo(({ data, year, isLoading = false }) => {
+  const datosMensuales = useMemo(() => {
+    if (!data?.length) return []
+
+    return MESES.map((mes, index) => {
+      const mesData = data.find(item => item.month === index + 1)
+      if (!mesData) return null
+
+      const porcentaje = mesData.valor_programacion > 0
+        ? (mesData.valor_ejecucion / mesData.valor_programacion) * 100
+        : 0
+
+      return {
+        mes,
+        mesNumero: index + 1,
+        ejecutado: mesData.valor_ejecucion || 0,
+        programado: mesData.valor_programacion || 0,
+        porcentaje: Number(porcentaje.toFixed(1))
+      }
+    }).filter(Boolean) as any[]
+  }, [data])
+
+  if (isLoading) {
+    return <EstadoCarga mensaje="Cargando análisis de kilómetros..." />
+  }
+
+  if (!datosMensuales.length) {
+    return <EstadoVacio mensaje="No hay datos de kilómetros" anio={year} />
+  }
+
+  const maximo = Math.max(...datosMensuales.map(d => d.porcentaje))
+  const totalEjecutado = datosMensuales.reduce((sum, d) => sum + d.ejecutado, 0)
+  const totalProgramado = datosMensuales.reduce((sum, d) => sum + d.programado, 0)
+  const promedioGeneral = totalProgramado > 0 ? Math.round((totalEjecutado / totalProgramado) * 100) : 0
+
+  return (
+    <div className="space-y-4">
+      <ContenedorGrafica titulo={`Kilómetros ${year}`}>
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={datosMensuales} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis
+                dataKey="mes"
+                tick={{ fontSize: 10, fill: '#6b7280' }}
+                axisLine={{ stroke: '#e5e7eb' }}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: '#6b7280' }}
+                axisLine={{ stroke: '#e5e7eb' }}
+                domain={[0, 120]}
+              />
+              <Tooltip content={<TooltipPersonalizado />} />
+              <Bar dataKey="porcentaje" fill="#10b981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </ContenedorGrafica>
+
+      {/* Grid de meses */}
+      <div className="grid grid-cols-4 gap-2">
+        {datosMensuales.map((d) => (
+          <TarjetaMes
+            key={d.mes}
+            mes={d.mes}
+            porcentaje={d.porcentaje}
+            subTexto={`${(d.ejecutado / 1000).toFixed(1)}K km`}
+            esActual={d.mesNumero === MES_ACTUAL}
+            esMejor={d.porcentaje === maximo}
+          />
+        ))}
+      </div>
+
+      {/* Resumen */}
+      <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+        <div className="flex justify-between items-center text-sm mb-2">
+          <span className="text-gray-600">Total ejecutado:</span>
+          <span className="font-bold text-gray-800">{(totalEjecutado / 1000).toFixed(1)}K km</span>
+        </div>
+        <div className="flex justify-between items-center text-sm">
+          <span className="text-gray-600">Eficiencia general:</span>
+          <span className="font-bold text-green-600">{promedioGeneral}%</span>
+        </div>
+      </div>
+    </div>
+  )
+})
+
+KilometersMonthlyChart.displayName = "KilometersMonthlyChart"
+
+// ============================================
+// GRÁFICA DE BONIFICACIONES MENSUALES
+// ============================================
+
+export const BonusMonthlyChart: React.FC<PropsMensual> = memo(({ data, year, isLoading = false }) => {
+  const datosMensuales = useMemo(() => {
+    if (!data?.length) return []
+
+    return MESES.slice(0, 10).map((mes, index) => { // Solo 10 meses como en el original
+      const mesData = data.find(item =>
+        item.month === index + 1 || item.monthNumber === index + 1
+      )
+      if (!mesData) return null
+
+      const bonusBase = mesData.bonusValue || mesData.baseBonus || 0
+      const bonusFinal = mesData.finalValue || mesData.finalBonus || 0
+
+      if (bonusBase <= 0 && bonusFinal <= 0) return null
+
+      const porcentaje = bonusBase > 0
+        ? Math.min(100, (bonusFinal / bonusBase) * 100)
+        : 0
+
+      return {
+        mes,
+        mesNumero: index + 1,
+        bonusBase,
+        bonusFinal,
+        porcentaje: Number(porcentaje.toFixed(1))
+      }
+    }).filter(Boolean) as any[]
+  }, [data])
+
+  if (isLoading) {
+    return <EstadoCarga mensaje="Cargando bonificaciones..." />
+  }
+
+  if (!datosMensuales.length) {
+    return <EstadoVacio mensaje="No hay datos de bonificaciones" anio={year} />
+  }
+
+  const maximo = Math.max(...datosMensuales.map(d => d.porcentaje))
+  const totalBonusFinal = datosMensuales.reduce((sum, d) => sum + d.bonusFinal, 0)
+  const totalBonusBase = datosMensuales.reduce((sum, d) => sum + d.bonusBase, 0)
+  const eficiencia = totalBonusBase > 0 ? Math.round((totalBonusFinal / totalBonusBase) * 100) : 0
+
+  return (
+    <div className="space-y-4">
+      <ContenedorGrafica titulo={`Bonificaciones ${year}`}>
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={datosMensuales} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis
+                dataKey="mes"
+                tick={{ fontSize: 10, fill: '#6b7280' }}
+                axisLine={{ stroke: '#e5e7eb' }}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: '#6b7280' }}
+                axisLine={{ stroke: '#e5e7eb' }}
+                domain={[0, 120]}
+              />
+              <Tooltip content={<TooltipPersonalizado />} />
+              <Bar dataKey="porcentaje" fill="#10b981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </ContenedorGrafica>
+
+      {/* Grid de meses */}
+      <div className="grid grid-cols-4 gap-2">
+        {datosMensuales.map((d) => (
+          <TarjetaMes
+            key={d.mes}
+            mes={d.mes}
+            porcentaje={d.porcentaje}
+            subTexto={`$${(d.bonusFinal / 1000).toFixed(0)}K`}
+            esActual={d.mesNumero === MES_ACTUAL}
+            esMejor={d.porcentaje === maximo}
+          />
+        ))}
+      </div>
+
+      {/* Resumen */}
+      <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <span className="text-gray-600">Total bonificado:</span>
+            <div className="font-bold text-gray-800">${totalBonusFinal.toLocaleString()}</div>
+          </div>
+          <div>
+            <span className="text-gray-600">Eficiencia:</span>
+            <div className="font-bold text-green-600">{eficiencia}%</div>
+          </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-500">
+          Meses con datos: {datosMensuales.length}/12
+        </div>
+      </div>
+    </div>
+  )
+})
+
+BonusMonthlyChart.displayName = "BonusMonthlyChart"
+
+// Exportar tooltip para uso externo si es necesario
+export const PerformanceTooltip = TooltipPersonalizado

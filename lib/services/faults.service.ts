@@ -19,7 +19,7 @@ class FaultsService {
   private db = getDatabase()
   private cache = getCache()
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): FaultsService {
     if (!FaultsService.instance) {
@@ -70,7 +70,7 @@ class FaultsService {
           'DL', 'DG', 'DGV', 'DEL', 'DEG', 'DEGV', 'INT', 'OM', 'OMD', 'OG', 'NPF',
           'HCC-L', 'HCC-G', 'HCC-GV')
     `
-    
+
     const queryParams: any[] = [params.userCode]
 
     // Agregar filtro de año si se especifica
@@ -97,7 +97,7 @@ class FaultsService {
           'HCC-L', 'HCC-G', 'HCC-GV')
       ORDER BY year DESC
     `
-    const availableYears = await this.db.executeQuery<{year: number}[]>(availableYearsQuery, [params.userCode])
+    const availableYears = await this.db.executeQuery<{ year: number }[]>(availableYearsQuery, [params.userCode])
 
     // Procesar datos para crear el formato requerido
     const faultRecords: FaultRecord[] = []
@@ -152,11 +152,11 @@ class FaultsService {
     await this.cache.delete(cacheKey)
   }
 
-  // Obtener detalles de Novedades para un usuario, código y año
+  // Obtener detalles de Novedades para un usuario y código (año opcional)
   async getUserFaultDetails(params: {
     userCode: string
     code: string
-    year: number
+    year?: number
   }): Promise<Array<{
     id: number
     codigo: string
@@ -166,7 +166,8 @@ class FaultsService {
     dias: number
     observaciones: string | null
   }>> {
-    const query = `
+    // Construir consulta base
+    let query = `
       SELECT 
         id as id,
         codigo_factor as codigo,
@@ -178,15 +179,25 @@ class FaultsService {
       FROM novedades
       WHERE codigo_empleado = ?
         AND codigo_factor = ?
-        AND YEAR(fecha_inicio_novedad) = ?
-      ORDER BY fecha_inicio_novedad ASC
     `
+
     const codeDescriptions: Record<string, string> = DEDUCTION_RULES.reduce((acc, rule) => {
       acc[rule.item] = rule.causa;
       return acc;
     }, {} as Record<string, string>);
     const descripcion = codeDescriptions[params.code] || params.code
-    return this.db.executeQuery(query, [descripcion, params.userCode, params.code, params.year])
+
+    const queryParams: any[] = [descripcion, params.userCode, params.code]
+
+    // Agregar filtro de año si se especifica
+    if (params.year) {
+      query += ` AND YEAR(fecha_inicio_novedad) = ?`
+      queryParams.push(params.year)
+    }
+
+    query += ` ORDER BY fecha_inicio_novedad DESC`
+
+    return this.db.executeQuery(query, queryParams)
   }
 }
 

@@ -8,40 +8,25 @@ import { useRouter } from "next/navigation"
 import SidebarOptimized from "./sidebar"
 import MobileProfileCard from "./mobile-profile-card"
 import DesktopHeader from "./desktop-header"
-import { ChevronRight } from "lucide-react"
+import { ArrowRight, Activity, Percent, TrendingUp } from "lucide-react"
 
+// Lazy load components
 const ActivitiesTabContent = lazy(() => import("./tabs/activities-tab"))
 const StatsTabContent = lazy(() => import("./tabs/stats-tab"))
 const ProfileDrawer = lazy(() => import("../profile-drawer"))
 const ProfileModal = lazy(() => import("../profile-modal"))
-const ProgressCards = lazy(() => import("../progress-cards"));
+const ProgressCards = lazy(() => import("../progress-cards"))
 const ActivityDetailModal = lazy(() => import("../activity-detail-modal"))
-import type { HealthMetrics, Activity } from "@/types/kpi"
 
-const TabContentSkeleton = () => (
-  <div className="animate-pulse">
-    <div className="h-8 bg-gray-200 rounded-lg w-1/3 mb-6"></div>
+import type { HealthMetrics } from "@/types/kpi"
+
+// Skeleton simulando la carga de contenido
+const ContentSkeleton = () => (
+  <div className="animate-pulse space-y-6">
+    <div className="h-40 bg-gray-100 rounded-2xl w-full"></div>
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div className="h-40 bg-gray-200 rounded-xl"></div>
-      <div className="h-40 bg-gray-200 rounded-xl"></div>
-      <div className="h-40 bg-gray-200 rounded-xl"></div>
-      <div className="h-40 bg-gray-200 rounded-xl"></div>
-    </div>
-  </div>
-)
-
-const FilterSkeleton = () => (
-  <div className="animate-pulse">
-    <div className="h-12 bg-gray-200 rounded-lg w-full"></div>
-  </div>
-)
-
-const ProgressCardsSkeleton = () => (
-  <div className="animate-pulse">
-    <div className="h-8 bg-gray-200 rounded-lg w-1/4 mb-6"></div>
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div className="h-32 bg-gray-200 rounded-xl"></div>
-      <div className="h-32 bg-gray-200 rounded-xl"></div>
+      <div className="h-64 bg-gray-100 rounded-2xl"></div>
+      <div className="h-64 bg-gray-100 rounded-2xl"></div>
     </div>
   </div>
 )
@@ -52,476 +37,221 @@ export default function MedicalApp() {
   const { user, logout } = useAuth()
 
   // State
-  const [loaded, setLoaded] = useState(false)
   const [activeTab, setActiveTab] = useState("profile")
   const [expandedCard, setExpandedCard] = useState<number | null>(null)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
-  const [profileImageError, setProfileImageError] = useState(false)
-  const [profileImageUrl, setProfileImageUrl] = useState("/focused-runner.png")
   const [kilometersData, setKilometersData] = useState<any>(null)
   const [bonusesData, setBonusesData] = useState<any>(null)
   const [isLoadingData, setIsLoadingData] = useState(true)
+
+  // Modals state
+  const [kilometrosDetailOpen, setKilometrosDetailOpen] = useState(false)
+  const [bonosDetailOpen, setBonosDetailOpen] = useState(false)
+
   const [healthMetrics, setHealthMetrics] = useState<HealthMetrics>({
     heartRate: 72,
     sleep: 7.5,
     stress: 24,
     hydration: 85,
   })
-  const [kilometrosDetailOpen, setKilometrosDetailOpen] = useState(false)
-  const [bonosDetailOpen, setBonosDetailOpen] = useState(false)
 
-  // Refs para controlar las solicitudes de red
-  const abortControllerRef = useMemo(() => new AbortController(), [])
-
-  // Set profile image URL
+  // Data fetching optimizado
   useEffect(() => {
-    setLoaded(true)
+    if (!user?.codigo) return
 
-    // Set profile image URL
-    if (user?.cedula) {
-      setProfileImageUrl(`https://admon.sao6.com.co/web/uploads/empleados/${user.cedula}.jpg`)
-      setProfileImageError(false)
-    }
-
-    // Limpiar controlador de aborto al desmontar
-    return () => {
-      abortControllerRef.signal.aborted || abortControllerRef.abort()
-    }
-  }, [user?.cedula, abortControllerRef])
-
-  // Optimizar la carga de datos con caché y control de solicitudes
-  useEffect(() => {
-    // Fetch kilometers and bonuses data
-    const fetchUserData = async () => {
-      if (!user?.codigo) return
-
+    const fetchData = async () => {
       setIsLoadingData(true)
-
       try {
-        // Usar el controlador de aborto para cancelar solicitudes pendientes
-        const signal = abortControllerRef.signal
+        // Verificar caché sesional (5 minutos)
+        const cacheKeyKm = `km-${user.codigo}`
+        const cacheKeyBonus = `bonus-${user.codigo}`
+        const cacheTimeKey = `time-${user.codigo}`
 
-        // Verificar si hay datos en sessionStorage para evitar solicitudes innecesarias
-        const cachedKmData = sessionStorage.getItem(`km-data-${user.codigo}`)
-        const cachedBonusData = sessionStorage.getItem(`bonus-data-${user.codigo}`)
-        const cacheTimestamp = sessionStorage.getItem(`data-timestamp-${user.codigo}`)
+        const cachedTime = sessionStorage.getItem(cacheTimeKey)
+        const now = Date.now()
 
-        // Verificar si el caché es válido (menos de 5 minutos)
-        const isCacheValid = cacheTimestamp && Date.now() - Number.parseInt(cacheTimestamp) < 300000
+        if (cachedTime && (now - Number(cachedTime) < 300000)) {
+          const cachedKm = sessionStorage.getItem(cacheKeyKm)
+          const cachedBonus = sessionStorage.getItem(cacheKeyBonus)
 
-        if (isCacheValid && cachedKmData && cachedBonusData) {
-          // Usar datos en caché
-          setKilometersData(JSON.parse(cachedKmData))
-          setBonusesData(JSON.parse(cachedBonusData))
-          setIsLoadingData(false)
-          return
-        }
-
-        // Función optimizada para fetch con timeout y caché
-        const fetchWithCache = async (url: string) => {
-          const response = await fetch(url, {
-            signal,
-            headers: {
-              "Cache-Control": "no-store",
-              Pragma: "no-cache",
-            },
-            next: { revalidate: 300 }, // Revalidar cada 5 minutos
-          })
-
-          if (!response.ok) {
-            throw new Error(`Error fetching data: ${response.status}`)
+          if (cachedKm && cachedBonus) {
+            setKilometersData(JSON.parse(cachedKm))
+            setBonusesData(JSON.parse(cachedBonus))
+            setIsLoadingData(false)
+            return
           }
-
-          return response.json()
         }
 
-        // Parallel data fetching with optimized fetch
-        const [kmData, bonusData] = await Promise.all([
-          fetchWithCache(`/api/user/kilometers?codigo=${user.codigo}`),
-          fetchWithCache(`/api/user/bonuses?codigo=${user.codigo}`),
+        // Fetch paralelo
+        const [kmRes, bonusRes] = await Promise.all([
+          fetch(`/api/user/kilometers?codigo=${user.codigo}`),
+          fetch(`/api/user/bonuses?codigo=${user.codigo}`)
         ])
 
-        // Guardar en sessionStorage para caché
-        sessionStorage.setItem(`km-data-${user.codigo}`, JSON.stringify(kmData))
-        sessionStorage.setItem(`bonus-data-${user.codigo}`, JSON.stringify(bonusData))
-        sessionStorage.setItem(`data-timestamp-${user.codigo}`, Date.now().toString())
+        if (kmRes.ok && bonusRes.ok) {
+          const kmData = await kmRes.json()
+          const bonusData = await bonusRes.json()
 
-        // Process and set data with the real API response structure
-        setBonusesData(bonusData)
-        setKilometersData(kmData)
-      } catch (error: unknown) {
-        if (error instanceof Error && error.name !== "AbortError") {
-          console.error("Error fetching user data:", error)
+          setKilometersData(kmData)
+          setBonusesData(bonusData)
 
-          // Intentar usar datos en caché si hay un error
-          try {
-            const cachedKmData = sessionStorage.getItem(`km-data-${user.codigo}`)
-            const cachedBonusData = sessionStorage.getItem(`bonus-data-${user.codigo}`)
-
-            if (cachedKmData && cachedBonusData) {
-              setKilometersData(JSON.parse(cachedKmData))
-              setBonusesData(JSON.parse(cachedBonusData))
-            }
-          } catch (cacheError) {
-            console.error("Error retrieving cached data:", cacheError)
-          }
+          // Guardar en caché
+          sessionStorage.setItem(cacheKeyKm, JSON.stringify(kmData))
+          sessionStorage.setItem(cacheKeyBonus, JSON.stringify(bonusData))
+          sessionStorage.setItem(cacheTimeKey, now.toString())
         }
+      } catch (error) {
+        console.error("Error cargando datos:", error)
       } finally {
         setIsLoadingData(false)
       }
     }
 
-    if (user?.codigo) {
-      fetchUserData()
-    }
-  }, [user?.codigo, abortControllerRef])
+    fetchData()
+  }, [user?.codigo])
 
-  // Optimizar el intervalo de actualización de métricas de salud
+  // Custom Event Listeners
   useEffect(() => {
-    let healthInterval: NodeJS.Timeout | null = null
-    let isActive = true
+    const handleOpenKm = () => setKilometrosDetailOpen(true)
+    const handleOpenBonus = () => setBonosDetailOpen(true)
 
-    // Solo actualizar métricas si la pestaña está visible y el componente está montado
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible" && isActive) {
-        if (!healthInterval) {
-          healthInterval = setInterval(() => {
-            if (isActive) {
-              setHealthMetrics((prev) => ({
-                heartRate: prev.heartRate + (Math.random() > 0.5 ? 1 : -1),
-                sleep: Math.max(5.5, Math.min(8.5, prev.sleep + (Math.random() > 0.5 ? 0.1 : -0.1))),
-                stress: Math.max(10, Math.min(50, prev.stress + (Math.random() > 0.5 ? 1 : -1))),
-                hydration: Math.max(70, Math.min(95, prev.hydration + (Math.random() > 0.5 ? 1 : -1))),
-              }))
-            }
-          }, 30000) // 30 segundos
-        }
-      } else {
-        if (healthInterval) {
-          clearInterval(healthInterval)
-          healthInterval = null
-        }
-      }
-    }
-
-    // Inicializar basado en la visibilidad actual
-    handleVisibilityChange()
-
-    // Agregar listener para cambios de visibilidad
-    document.addEventListener("visibilitychange", handleVisibilityChange)
+    window.addEventListener("openKilometrosDetail", handleOpenKm)
+    window.addEventListener("openBonosDetail", handleOpenBonus)
 
     return () => {
-      isActive = false
-      if (healthInterval) {
-        clearInterval(healthInterval)
-      }
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
+      window.removeEventListener("openKilometrosDetail", handleOpenKm)
+      window.removeEventListener("openBonosDetail", handleOpenBonus)
     }
   }, [])
 
-  // Efecto separado para los event listeners
-  useEffect(() => {
-    // Event listeners for detail modals
-    const handleOpenKilometrosDetail = () => setKilometrosDetailOpen(true)
-    const handleOpenBonosDetail = () => setBonosDetailOpen(true)
-
-    window.addEventListener("openKilometrosDetail", handleOpenKilometrosDetail)
-    window.addEventListener("openBonosDetail", handleOpenBonosDetail)
-
-    return () => {
-      window.removeEventListener("openKilometrosDetail", handleOpenKilometrosDetail)
-      window.removeEventListener("openBonosDetail", handleOpenBonosDetail)
-    }
-  }, [])
-
-  // Handle profile image error
-  const handleImageError = useCallback(() => {
-    console.log("Error al cargar la imagen de perfil, usando imagen por defecto")
-    setProfileImageError(true)
-    setProfileImageUrl("/focused-runner.png")
-  }, [])
-
-  // Profile actions
-  const openProfile = useCallback(() => setIsProfileOpen(true), [])
-  const closeProfile = useCallback(() => setIsProfileOpen(false), [])
+  // Handlers
   const handleLogout = useCallback(() => {
     logout()
     router.push("/")
   }, [logout, router])
 
-  // Toggle card expansion
-  const toggleCardExpand = useCallback((id: number) => {
-    setExpandedCard((prev) => (prev === id ? null : id))
-  }, [])
+  const openProfile = useCallback(() => setIsProfileOpen(true), [])
+  const closeProfile = useCallback(() => setIsProfileOpen(false), [])
 
-  // Update the data extraction to match the real API response structure
-  // Data for display - use optional chaining to safely access nested properties
-  const kilometersTotal = kilometersData?.summary?.totalExecuted || 0
-  const kilometersGoal = kilometersData?.summary?.totalProgrammed || 0
-  const kilometersPercentage = kilometersData?.summary?.percentage || 0
-  const bonusesTotal = bonusesData?.summary?.totalExecuted || 0
-  const bonusesGoal = bonusesData?.summary?.totalProgrammed || 0
-  const bonusesPercentage = bonusesData?.summary?.percentage || 0
-  const bonusesAvailable = bonusesData?.lastMonthData?.finalValue || 0
-  const lastMonthName = bonusesData?.lastMonthData?.monthName || ""
-  const lastMonthYear = bonusesData?.lastMonthData?.year || new Date().getFullYear()
+  // Datos procesados
+  const summaryData = useMemo(() => ({
+    kilometersTotal: kilometersData?.summary?.totalExecuted || 0,
+    kilometersGoal: kilometersData?.summary?.totalProgrammed || 0,
+    kilometersPercentage: kilometersData?.summary?.percentage || 0,
+    bonusesAvailable: bonusesData?.lastMonthData?.finalValue || 0,
+    lastMonthName: bonusesData?.lastMonthData?.monthName || "",
+    lastMonthYear: bonusesData?.lastMonthData?.year || new Date().getFullYear(),
+  }), [kilometersData, bonusesData])
 
-  // Sample data - memoizado para evitar recreaciones
-  const upcomingActivities = useMemo<Activity[]>(
-    () => [
-      {
-        id: 1,
-        day: "12",
-        month: "Jun",
-        title: "Ruta Montaña",
-        time: "9am - 1pm",
-        dayOfWeek: "Domingo",
-        distance: "15 km",
-        location: "Sierra Nevada",
-        participants: 8,
-        image: "/winding-mountain-path.png",
-        difficulty: "Moderada",
-        elevation: "650m",
-        terrain: "Montañoso",
-      },
-    ],
-    [],
-  )
+  // Variantes de animación
+  const fadeIn = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { duration: 0.5 } }
+  }
 
-  // Animation variants - memoizados
-  const cardVariants = useMemo(
-    () => ({
-      initial: { scale: 1 },
-      hover: { scale: 1.03, y: -5 },
-      tap: { scale: 0.98 },
-    }),
-    [],
-  )
-
-  const fadeIn = useMemo(
-    () => ({
-      hidden: { opacity: 0 },
-      visible: {
-        opacity: 1,
-        transition: { duration: 0.6 },
-      },
-    }),
-    [],
-  )
-
-  const staggerList = useMemo(
-    () => ({
-      hidden: { opacity: 0 },
-      visible: {
-        opacity: 1,
-        transition: {
-          staggerChildren: 0.1,
-          delayChildren: 0.2,
-        },
-      },
-    }),
-    [],
-  )
-
-  // Optimizar las partículas de fondo
-  const particles = useMemo(
-    () =>
-      Array.from({ length: 8 }).map((_, i) => ({
-        id: i,
-        x: Math.random() * 100,
-        y: Math.random() * 100,
-        size: 2 + Math.random() * 6,
-        duration: 15 + Math.random() * 30,
-        delay: Math.random() * 5,
-      })),
-    [],
-  )
-
-  // Format currency
-  const formatCurrency = useCallback((amount: number) => {
-    return new Intl.NumberFormat("es-CO", {
-      style: "currency",
-      currency: "COP",
-      maximumFractionDigits: 0,
-    }).format(amount)
-  }, [])
+  const cardVariants = {
+    initial: { scale: 0.95, opacity: 0 },
+    hover: { scale: 1.02, transition: { duration: 0.2 } }
+  }
 
   return (
-    <div className="flex min-h-screen w-full bg-gradient-to-br from-emerald-50 via-green-50/80 to-white transform-gpu">
-      {/* Background elements - Refinados los elementos de fondo con mejores gradientes */}
-      <div className="absolute top-0 left-0 w-full h-80 bg-gradient-to-br from-emerald-500/20 via-green-400/15 to-transparent -z-10"></div>
-      <div className="absolute top-16 right-16 w-72 h-72 rounded-full bg-gradient-to-br from-emerald-300/25 to-green-200/20 blur-3xl -z-10"></div>
-      <div className="absolute bottom-40 left-12 w-96 h-96 rounded-full bg-gradient-to-tr from-green-200/30 to-emerald-100/25 blur-3xl -z-10"></div>
-
-      <motion.div
-        initial={false}
-        className="absolute top-1/3 left-1/2 w-96 h-96 rounded-full bg-gradient-to-r from-emerald-100/30 to-green-50/25 -z-10 transform-gpu"
-        animate={{
-          scale: [1, 1.08, 1],
-          opacity: [0.3, 0.4, 0.3],
-          rotate: [0, 180, 360],
-        }}
-        transition={{
-          duration: 12,
-          repeat: Number.POSITIVE_INFINITY,
-          repeatType: "reverse",
-          ease: "easeInOut",
-        }}
-      ></motion.div>
-
-      {/* Animated particles - Mejoradas las partículas con gradientes más elegantes */}
-      <AnimatePresence initial={false}>
-        {loaded &&
-          particles.map((particle) => (
-            <motion.div
-              key={particle.id}
-              className="absolute rounded-full bg-gradient-to-br from-emerald-400/30 via-green-300/25 to-emerald-200/20 backdrop-blur-sm shadow-lg -z-10 transform-gpu"
-              style={{
-                left: `${particle.x}%`,
-                top: `${particle.y}%`,
-                width: particle.size,
-                height: particle.size,
-              }}
-              initial={{ opacity: 0, y: 0, scale: 0.8 }}
-              animate={{
-                y: [0, -25, 0],
-                opacity: [0.2, 0.4, 0.2],
-                scale: [0.8, 1, 0.8],
-              }}
-              transition={{
-                duration: particle.duration,
-                repeat: Number.POSITIVE_INFINITY,
-                delay: particle.delay,
-                ease: "easeInOut",
-              }}
-            />
-          ))}
-      </AnimatePresence>
-
-      {/* Sidebar for desktop */}
+    <div className="flex min-h-screen w-full bg-white">
+      {/* Sidebar Desktop */}
       {!isMobile && user && (
-        <div className="lg:w-[320px] xl:w-[360px] flex-shrink-0">
-          <div className="sticky top-0 h-screen overflow-y-auto p-6">
+        <div className="w-[280px] xl:w-[320px] flex-shrink-0 bg-white border-r border-gray-100 z-20">
+          <div className="sticky top-0 h-screen overflow-y-auto">
             <SidebarOptimized
               user={user}
               openProfile={openProfile}
               handleLogout={handleLogout}
-              kilometersTotal={kilometersTotal}
-              bonusesAvailable={bonusesAvailable}
-              lastMonthName={lastMonthName}
-              lastMonthYear={lastMonthYear}
+              kilometersTotal={summaryData.kilometersTotal}
+              bonusesAvailable={summaryData.bonusesAvailable}
+              lastMonthName={summaryData.lastMonthName}
+              lastMonthYear={summaryData.lastMonthYear}
               kilometersData={kilometersData}
             />
           </div>
         </div>
       )}
 
-      {/* Main content area - Mejorado el área de contenido principal */}
+      {/* Main Content */}
       <div className="flex-1 min-w-0">
-        <div className="w-full mx-auto px-4 sm:px-6 py-10 relative z-0 lg:max-w-none lg:px-10">
+        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className={`w-full h-full transform-gpu ${isMobile ? "max-w-4xl mx-auto" : ""}`}
+            transition={{ duration: 0.4 }}
           >
-            {/* Mobile Profile Card */}
-            {isMobile && user && (
-              <div className="mb-8">
+            {/* Header / Mobile Profile */}
+            {isMobile ? (
+              <div className="mb-6">
                 <MobileProfileCard
                   user={user}
-                  profileImageUrl={profileImageUrl}
-                  handleImageError={handleImageError}
                   openProfile={openProfile}
                   activeTab={activeTab}
                   setActiveTab={setActiveTab}
                   healthMetrics={healthMetrics}
                 />
               </div>
-            )}
-
-            {/* Desktop Content Header */}
-            {!isMobile && (
+            ) : (
               <div className="mb-8">
                 <DesktopHeader
                   user={user}
-                  bonusesAvailable={bonusesAvailable}
-                  lastMonthName={lastMonthName}
-                  lastMonthYear={lastMonthYear}
+                  bonusesAvailable={summaryData.bonusesAvailable}
+                  lastMonthName={summaryData.lastMonthName}
+                  lastMonthYear={summaryData.lastMonthYear}
+                  openProfile={openProfile}
                 />
               </div>
             )}
 
-            {/* Tab Content - Mejorado el contenedor de tabs con mejor espaciado */}
-            <div className="mb-10">
-              <Suspense fallback={<TabContentSkeleton />}>
-                {activeTab === "activities" && (
-                  <ActivitiesTabContent
-                    upcomingActivities={upcomingActivities}
-                    expandedCard={expandedCard}
-                    toggleCardExpand={toggleCardExpand}
-                    staggerList={staggerList}
-                  />
-                )}
-
-                {activeTab === "stats" && (
-                  <StatsTabContent
-                    kilometersTotal={kilometersTotal}
-                    kilometersGoal={kilometersGoal}
-                    kilometersPercentage={kilometersPercentage}
-                    cardVariants={cardVariants}
-                    fadeIn={fadeIn}
-                  />
-                )}
-              </Suspense>
-            </div>
-
-            {/* Progress Cards Section - Mejorada la sección de progreso con mejor diseño */}
-            <div className="max-w-full mx-auto transform-gpu">
-              <div className="flex justify-between items-center mb-8">
-                <div className="flex items-center">
-                  <div className="h-2 w-8 bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-400 rounded-full mr-3 shadow-sm"></div>
-                  <h3 className="text-gray-800 font-bold text-2xl tracking-tight">Mi Progreso</h3>
+            {/* Dashboard Sections */}
+            <div className="space-y-8">
+              {/* Progress Title */}
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="bg-green-100 p-2 rounded-lg">
+                    <Activity className="h-5 w-5 text-green-600" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">Resumen de Progreso</h3>
                 </div>
-                <button className="text-emerald-600 text-sm font-semibold hover:text-emerald-700 transition-all duration-200 flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-emerald-50 transform-gpu">
-                  Ver todos
-                  <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </button>
               </div>
 
-              <Suspense fallback={<ProgressCardsSkeleton />}>
+              {/* Progress Cards */}
+              <Suspense fallback={<ContentSkeleton />}>
                 <ProgressCards
-                  kilometersData={{
-                    total: kilometersTotal,
-                    goal: kilometersGoal,
-                    percentage: kilometersPercentage,
-                  }}
-                  bonusesData={{
-                    available: bonusesAvailable,
-                    total: bonusesTotal,
-                    goal: bonusesGoal,
-                    percentage: bonusesPercentage,
-                  }}
                   userCode={user?.codigo || ""}
+                  kilometersData={kilometersData}
+                  bonusesData={bonusesData}
                 />
               </Suspense>
+
+              {/* Tabs Content (si es necesario) */}
+              <div className="mt-8">
+                <Suspense fallback={null}>
+                  {activeTab === "stats" && !isMobile && (
+                    <StatsTabContent
+                      kilometersTotal={summaryData.kilometersTotal}
+                      kilometersGoal={summaryData.kilometersGoal}
+                      kilometersPercentage={summaryData.kilometersPercentage}
+                      cardVariants={cardVariants}
+                      fadeIn={fadeIn}
+                    />
+                  )}
+                </Suspense>
+              </div>
             </div>
           </motion.div>
         </div>
       </div>
 
-      {/* Profile Drawer/Modal */}
+      {/* Modals & Drawers */}
       <Suspense fallback={null}>
-        {isProfileOpen &&
-          (isMobile ? (
-            <ProfileDrawer isOpen={isProfileOpen} onClose={closeProfile} />
-          ) : (
-            <ProfileModal isOpen={isProfileOpen} onClose={closeProfile} />
-          ))}
-      </Suspense>
+        {isProfileOpen && (isMobile ?
+          <ProfileDrawer isOpen={isProfileOpen} onClose={closeProfile} /> :
+          <ProfileModal isOpen={isProfileOpen} onClose={closeProfile} />
+        )}
 
-      {/* Activity Detail Modals */}
-      <Suspense fallback={null}>
         {kilometrosDetailOpen && (
           <ActivityDetailModal
             isOpen={kilometrosDetailOpen}

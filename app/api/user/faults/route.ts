@@ -5,10 +5,10 @@ async function handleGet(request: Request) {
   const { searchParams } = new URL(request.url)
 
   // Si se solicitan detalles de una falta específica
-  if (searchParams.has('detalle') && searchParams.has('codigo') && searchParams.has('year')) {
+  if (searchParams.has('detalle') && searchParams.has('codigoFalta')) {
     const userCode = commonParams.getUserCode(searchParams)!
-    const code = searchParams.get('codigo')!
-    const year = parseInt(searchParams.get('year')!)
+    const code = searchParams.get('codigoFalta')!
+    const year = searchParams.has('year') ? parseInt(searchParams.get('year')!) : undefined
     const faultsService = getFaultsService()
     const detalles = await faultsService.getUserFaultDetails({ userCode, code, year })
     return apiResponse.success(detalles)

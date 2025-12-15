@@ -1,4 +1,5 @@
 import type { Operator, CategoryColors, FilterType, SortType, SortOrder, CategoryStats, TimeFilterType } from "@/types/operator-types"
+import { clasificarOperador, determinarCategoriaFinal, type CategoriaOperador } from "./clasificacion-cualitativa"
 
 // Return icon name as string instead of JSX
 export const getCategoryIcon = (category: string) => {
@@ -105,85 +106,141 @@ export const getRankTextColor = (rank: number) => {
 
 
 /**
- * Procesa los datos de operadores según el tipo de filtro, sumando los datos de kilómetros
- * y recalculando los porcentajes cuando sea necesario (año completo o global)
- * @param operators Lista de operadores a procesar
- * @param filterType Tipo de filtro aplicado (global, year, month)
- * @returns Lista de operadores con datos procesados
+ * Procesa los datos de operadores según el tipo de filtro, aplicando la clasificación cualitativa
  */
-export function processOperatorsData(operators: Operator[], filterType: TimeFilterType): Operator[] {
-  // Si es filtro por mes, no necesitamos procesar nada adicional
-  if (filterType === 'month' || operators.length === 0) {
+export const processOperatorsData = (operators: Operator[], filterType: TimeFilterType): Operator[] => {
+  if (operators.length === 0) {
     return operators;
   }
   
-  // Para filtros por año o global, necesitamos sumar los datos
+  console.log(`Procesando ${operators.length} operadores con filtro: ${filterType}`);
+  
   return operators.map(operator => {
-    // Obtener los valores actuales
-    const totalProgramado = operator.km?.total_programado || 0;
-    const totalEjecutado = operator.km?.total_ejecutado || 0;
+    let porcentajeKm = 0;
+    let porcentajeBono = 0;
     
-    // Calcular el nuevo porcentaje basado en los totales
-    let newPercentage = 0;
-    if (totalProgramado > 0) {
-      newPercentage = (totalEjecutado / totalProgramado) * 100;
-    }
-    
-    // Redondear a 2 decimales
-    newPercentage = Math.round(newPercentage * 100) / 100;
-    
-    // Calcular eficiencia ponderada que considera TANTO el porcentaje como la cantidad total
-    // Esto evita que personas con pocos km programados pero 100% de cumplimiento estén por encima
-    // de personas con muchos más km ejecutados pero con un porcentaje un poco menor
-    
-    // Encontrar el valor máximo de kilómetros en toda la flota para normalizar
-    const maxKmEnFlota = Math.max(...operators.map(op => op.km?.total_ejecutado || 0));
-    
-    // Peso del porcentaje en la eficiencia final (0.6 = 60% del peso)
-    const pesoPorcentaje = 0.6;
-    // Peso de los kilómetros totales en la eficiencia final (0.4 = 40% del peso)
-    const pesoKilometros = 0.4;
-    
-    // Normalizar los kilómetros ejecutados (0-100)
-    const kmNormalizados = maxKmEnFlota > 0 ? (totalEjecutado / maxKmEnFlota) * 100 : 0;
-    
-    // Calcular eficiencia ponderada (combinación de porcentaje y cantidad)
-    const eficienciaPonderada = (newPercentage * pesoPorcentaje) + (kmNormalizados * pesoKilometros);
-    const eficienciaRedondeada = Math.round(eficienciaPonderada * 10) / 10; // Redondear a 1 decimal
-    
-    
-    // Determinar la categoría basada en la eficiencia ponderada
-    let categoria: "Oro" | "Plata" | "Bronce" | "Mejorar" | "Taller Conciencia";
-    if (eficienciaRedondeada >= 95) {
-      categoria = "Oro";
-    } else if (eficienciaRedondeada >= 85) {
-      categoria = "Plata";
-    } else if (eficienciaRedondeada >= 75) {
-      categoria = "Bronce";
-    } else if (eficienciaRedondeada >= 60) {
-      categoria = "Mejorar";
+    // Determinar porcentajes según el tipo de filtro
+    if (filterType === 'month') {
+      porcentajeKm = operator.km?.percentage || 0;
+      porcentajeBono = operator.bonus?.percentage || 0;
+    } else if (filterType === 'year') {
+      const totalProgramado = operator.km?.total_programado || 0;
+      const totalEjecutado = operator.km?.total_ejecutado || 0;
+      
+      if (totalProgramado > 0) {
+        porcentajeKm = (totalEjecutado / totalProgramado) * 100;
+      }
+      porcentajeKm = Math.round(porcentajeKm * 100) / 100;
+      porcentajeBono = operator.bonus?.percentage || 0;
     } else {
-      categoria = "Taller Conciencia";
+      const totalProgramado = operator.km?.total_programado || 0;
+      const totalEjecutado = operator.km?.total_ejecutado || 0;
+      
+      if (totalProgramado > 0) {
+        porcentajeKm = (totalEjecutado / totalProgramado) * 100;
+      }
+      porcentajeKm = Math.round(porcentajeKm * 100) / 100;
+      porcentajeBono = operator.bonus?.percentage || 0;
     }
     
-    // Devolver una copia del operador con los datos actualizados
+    // Aplicar clasificación cualitativa
+    const clasificacion = clasificarOperador(porcentajeBono, porcentajeKm);
+    const eficienciaSimple = (porcentajeBono + porcentajeKm) / 2;
+    
     return {
       ...operator,
+      bonus: {
+        ...operator.bonus,
+        percentage: porcentajeBono,
+        category: clasificacion.categoriaBono,
+        total: operator.bonus?.total || 0,
+        trend: operator.bonus?.trend || "stable",
+        date: operator.bonus?.date || null
+      },
       km: {
-        percentage: newPercentage,
+        ...operator.km,
+        percentage: porcentajeKm,
         total: operator.km?.total || 0,
         total_programado: operator.km?.total_programado || 0,
         total_ejecutado: operator.km?.total_ejecutado || 0,
-        category: operator.km?.category || categoria,
+        category: clasificacion.categoriaKm,
         trend: operator.km?.trend || "stable",
         date: operator.km?.date || null
       },
-      // Actualizar la eficiencia general y la categoría del operador
-      efficiency: eficienciaRedondeada,
-      category: categoria
+      efficiency: eficienciaSimple,
+      category: clasificacion.categoriaFinal,
+      clasificacionDetalles: {
+        razonamiento: clasificacion.detalles.razonamiento,
+        categoriaBono: clasificacion.categoriaBono,
+        categoriaKm: clasificacion.categoriaKm,
+        categoriaFinal: clasificacion.categoriaFinal
+      }
     };
   });
 };
+
+/**
+ * Función auxiliar para clasificar un operador individual sin procesar toda la lista
+ * Útil para casos donde solo necesitamos la clasificación de un operador específico
+ */
+export function clasificarOperadorIndividual(
+  porcentajeBono: number,
+  porcentajeKm: number
+): {
+  categoriaFinal: CategoriaOperador;
+  categoriaBono: CategoriaOperador;
+  categoriaKm: CategoriaOperador;
+  razonamiento: string;
+} {
+  const clasificacion = clasificarOperador(porcentajeBono, porcentajeKm);
+  
+  return {
+    categoriaFinal: clasificacion.categoriaFinal,
+    categoriaBono: clasificacion.categoriaBono,
+    categoriaKm: clasificacion.categoriaKm,
+    razonamiento: clasificacion.detalles.razonamiento
+  };
+}
+
+/**
+ * Función para actualizar la categoría de un operador existente
+ * sin afectar otros campos
+ */
+export function actualizarCategoriaOperador(operator: Operator): Operator {
+  const porcentajeBono = operator.bonus?.percentage || 0;
+  const porcentajeKm = operator.km?.percentage || 0;
+  
+  const clasificacion = clasificarOperador(porcentajeBono, porcentajeKm);
+  
+  return {
+    ...operator,
+    bonus: {
+      ...operator.bonus,
+      category: clasificacion.categoriaBono,
+      percentage: porcentajeBono,
+      total: operator.bonus?.total || 0,
+      trend: operator.bonus?.trend || "stable",
+      date: operator.bonus?.date || null
+    },
+    km: {
+      ...operator.km,
+      category: clasificacion.categoriaKm,
+      percentage: porcentajeKm,
+      total: operator.km?.total || 0,
+      total_programado: operator.km?.total_programado || 0,
+      total_ejecutado: operator.km?.total_ejecutado || 0,
+      trend: operator.km?.trend || "stable",
+      date: operator.km?.date || null
+    },
+    category: clasificacion.categoriaFinal,
+    clasificacionDetalles: {
+      razonamiento: clasificacion.detalles.razonamiento,
+      categoriaBono: clasificacion.categoriaBono,
+      categoriaKm: clasificacion.categoriaKm,
+      categoriaFinal: clasificacion.categoriaFinal
+    }
+  };
+}
 
 export const calculateCategoryStats = (operators: Operator[]): CategoryStats => {
   return {

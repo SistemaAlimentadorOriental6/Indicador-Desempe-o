@@ -1,0 +1,79 @@
+name: CI/CD Medical App
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # Build y Test
+  build:
+    name: Build
+    runs-on: [self-hosted, Linux, X64]
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+      
+      - name: Install Dependencies
+        run: pnpm install
+      
+      - name: Build Application
+        run: pnpm run build
+  
+  # Deploy
+  deploy:
+    name: Deploy
+    runs-on: [self-hosted, Linux, X64]
+    needs: [build]
+    
+    steps:
+      - name: Verificar y clonar repositorio
+        run: |
+          REPO_URL="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          
+          if [ -d "/var/www/operaciones/indicador-desempeno/.git" ]; then
+            echo "Repositorio existe, actualizando..."
+            cd /var/www/operaciones/indicador-desempeno
+            git remote set-url origin "$REPO_URL"
+            git fetch origin main
+            git reset --hard origin/main
+          else
+            echo "Repositorio no existe, clonando..."
+            mkdir -p /var/www/operaciones
+            cd /var/www/operaciones
+            if [ -d "indicador-desempeno" ]; then
+              rm -rf indicador-desempeno
+            fi
+            git clone "$REPO_URL" indicador-desempeno
+            cd indicador-desempeno
+            git checkout main
+          fi
+      
+      - name: Instalar dependencias
+        working-directory: /var/www/operaciones/indicador-desempeno
+        run: pnpm install
+      
+      - name: Build de la aplicación
+        working-directory: /var/www/operaciones/indicador-desempeno
+        run: pnpm run build
+      
+      - name: Reiniciar con PM2
+        working-directory: /var/www/operaciones/indicador-desempeno
+        run: |
+          pm2 delete indicador_desempeno || true
+          PORT=3002 pm2 start "pnpm start" --name indicador_desempeno --cwd /var/www/operaciones/indicador-desempeno
+          pm2 save
+      
+      - name: Deploy completado
+        run: echo "Deploy exitoso - Aplicación corriendo en puerto 3002"

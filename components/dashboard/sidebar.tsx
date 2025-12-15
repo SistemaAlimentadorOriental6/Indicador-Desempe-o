@@ -1,34 +1,22 @@
 "use client"
 
-import { AnimatePresence } from "framer-motion"
-import {
-  Calendar,
-  User,
-  LogOut,
-  Sparkles,
-  Bell,
-  ChevronRight,
-  MapPin,
-  CreditCard,
-  Users,
-  BadgeIcon as IdCard,
-  Home,
-  BarChart3,
-  Settings,
-  HelpCircle,
-} from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect, memo } from "react"
+import { AnimatePresence, motion } from "framer-motion"
+import { Calendar, LogOut, MapPin, CreditCard, Users, BadgeIcon as IdCard } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
 import LogoutConfirmation from "./logout-confirmation"
 import { useProfileData } from "@/hooks/use-profile-data"
-import { Skeleton } from "@/components/ui/skeleton"
-import Image from "next/image"
 import { useDynamicUserImage } from "@/hooks/use-dynamic-user-image"
+import Image from "next/image"
 
-interface DesktopSidebarProps {
-  user: any
+interface SidebarProps {
+  user: {
+    nombre?: string
+    codigo?: string
+    cedula?: string
+    rol?: string
+  }
   openProfile: () => void
   handleLogout: () => void
   kilometersTotal: number
@@ -38,171 +26,200 @@ interface DesktopSidebarProps {
   kilometersData: any
 }
 
-export default function DesktopSidebar({
+const SidebarSkeleton = memo(() => (
+  <div className="animate-pulse p-6 space-y-6">
+    <div className="flex items-center gap-3">
+      <div className="w-10 h-10 bg-gray-200 rounded-xl" />
+      <div className="space-y-2">
+        <div className="h-4 w-24 bg-gray-200 rounded" />
+        <div className="h-3 w-16 bg-gray-100 rounded" />
+      </div>
+    </div>
+    <div className="h-10 bg-gray-100 rounded-xl" />
+    <div className="flex flex-col items-center gap-4">
+      <div className="w-20 h-20 bg-gray-200 rounded-full" />
+      <div className="h-5 w-32 bg-gray-200 rounded" />
+      <div className="h-4 w-24 bg-gray-100 rounded-full" />
+    </div>
+    <div className="space-y-3">
+      <div className="h-16 bg-gray-100 rounded-xl" />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="h-14 bg-gray-100 rounded-xl" />
+        <div className="h-14 bg-gray-100 rounded-xl" />
+      </div>
+      <div className="h-16 bg-gray-100 rounded-xl" />
+    </div>
+  </div>
+))
+
+SidebarSkeleton.displayName = "SidebarSkeleton"
+
+const InfoCard = memo(({ icon: Icon, label, value, iconBg = "bg-green-500" }: {
+  icon: any
+  label: string
+  value?: string
+  iconBg?: string
+}) => (
+  <div className="bg-gray-50 rounded-xl p-4 flex items-center gap-3">
+    <div className={`${iconBg} rounded-lg p-2`}>
+      <Icon className="h-4 w-4 text-white" />
+    </div>
+    <div className="min-w-0 flex-1">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="text-sm font-semibold text-gray-800 truncate">{value || "—"}</p>
+    </div>
+  </div>
+))
+
+InfoCard.displayName = "InfoCard"
+
+function DesktopSidebar({
   user,
-  openProfile,
   handleLogout,
   kilometersTotal,
   bonusesAvailable,
   lastMonthName,
   lastMonthYear,
-  kilometersData,
-}: DesktopSidebarProps) {
-  const [currentDate, setCurrentDate] = useState<string>("")
+}: SidebarProps) {
+  const [currentDate, setCurrentDate] = useState("")
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
-  // Obtener datos adicionales del perfil
-  const { profileData, isLoading, error } = useProfileData(user?.cedula)
+  const { profileData, isLoading } = useProfileData(user?.cedula)
   const { imgSrc, isLoading: isImageLoading } = useDynamicUserImage(user?.cedula)
 
-  // Format current date
   useEffect(() => {
+    setMounted(true)
     const date = new Date()
-    const options: Intl.DateTimeFormatOptions = {
+    setCurrentDate(date.toLocaleDateString("es-CO", {
       year: "numeric",
       month: "long",
       day: "numeric",
-    }
-    setCurrentDate(date.toLocaleDateString("es-CO", options))
+    }))
   }, [])
 
-  // Handle logout with confirmation
-  const confirmLogout = () => {
-    setShowLogoutConfirm(true)
-  }
+  const userInitials = user?.nombre
+    ?.split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "US"
 
-  const menuItems = [
-    { icon: Home, label: "Dashboard", active: true },
-    { icon: BarChart3, label: "Reportes" },
-    { icon: User, label: "Perfil" },
-    { icon: Settings, label: "Configuración" },
-    { icon: HelpCircle, label: "Ayuda" },
-  ]
+  if (!mounted) {
+    return <SidebarSkeleton />
+  }
 
   return (
     <>
-      <div className="w-full h-full bg-gradient-to-b from-white to-green-50/30 border border-green-200/50 flex flex-col shadow-xl rounded-2xl overflow-hidden">
-        <div className="p-8 border-b border-green-100/50 bg-white/80 backdrop-blur-sm">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-3 shadow-lg">
-              <Image src="/LOGOS-SAO.webp" alt="Logo" width={32} height={32} />
+      <div className="h-full bg-white border-r border-gray-100 flex flex-col">
+        <div className="p-6 border-b border-gray-100">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-green-500 rounded-xl p-2.5">
+              <Image src="/LOGOS-SAO.webp" alt="Logo" width={24} height={24} />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-green-800">Panel Principal</h1>
-              <p className="text-xs text-green-600/70 font-medium">Sistema de Gestión</p>
+              <h1 className="text-lg font-bold text-gray-900">SAO6</h1>
+              <p className="text-xs text-gray-500">Sistema de Gestión</p>
             </div>
           </div>
 
-          <Badge className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200/50 text-green-700 px-4 py-2 rounded-xl border w-full justify-center shadow-sm">
-            <Calendar className="h-4 w-4 mr-2" />
-            <span className="text-sm font-semibold">{currentDate}</span>
-          </Badge>
+          <div className="flex items-center gap-2 bg-gray-50 px-4 py-2.5 rounded-xl">
+            <Calendar className="h-4 w-4 text-gray-400" />
+            <span className="text-sm text-gray-600">{currentDate}</span>
+          </div>
         </div>
 
-        <div className="p-8 border-b border-green-100/50">
-          <div className="text-center mb-6">
-            <div className="relative inline-block mb-4">
-              <div className="absolute inset-0 bg-gradient-to-br from-green-400 to-green-600 rounded-full blur-md opacity-20 scale-110"></div>
-              <Avatar className="relative h-24 w-24 border-4 border-white shadow-2xl mx-auto ring-2 ring-green-200/50">
+        <div className="p-6 border-b border-gray-100">
+          <div className="flex flex-col items-center text-center mb-6">
+            <div className="relative mb-4">
+              <Avatar className="h-20 w-20 border-4 border-white shadow-lg">
                 {isImageLoading ? (
-                  <Skeleton className="h-full w-full rounded-full" />
+                  <div className="w-full h-full bg-gray-200 animate-pulse rounded-full" />
                 ) : (
                   <>
-                    <AvatarImage src={imgSrc || undefined} alt={user?.nombre || "Usuario"} className="object-cover" />
-                    <AvatarFallback className="bg-gradient-to-br from-green-500 to-green-600 text-white text-xl font-bold">
-                      {user?.nombre
-                        ?.split(" ")
-                        .map((n: string) => n[0])
-                        .join("")
-                        .slice(0, 2) || "FS"}
+                    <AvatarImage src={imgSrc || undefined} alt={user?.nombre} className="object-cover" />
+                    <AvatarFallback className="bg-green-500 text-white text-lg font-bold">
+                      {userInitials}
                     </AvatarFallback>
                   </>
                 )}
               </Avatar>
-              <div className="absolute -bottom-1 -right-1 bg-gradient-to-br from-green-400 to-green-500 rounded-full p-2 border-3 border-white shadow-lg">
-                <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white flex items-center justify-center">
+                <div className="w-2 h-2 bg-white rounded-full" />
               </div>
             </div>
 
-            <h2 className="text-xl font-bold text-gray-900 mb-1 tracking-tight">
-              {user?.nombre}
-            </h2>
-            <div className="inline-flex items-center gap-2 bg-gradient-to-r from-green-100 to-emerald-100 px-4 py-2 rounded-full border border-green-200/50">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <p className="text-green-700 font-semibold text-sm">{profileData?.cargo}</p>
-            </div>
+            <h2 className="text-lg font-bold text-gray-900 mb-1">{user?.nombre || "Usuario"}</h2>
+
+            {isLoading ? (
+              <div className="h-6 w-24 bg-gray-100 rounded-full animate-pulse" />
+            ) : (
+              <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                {profileData?.cargo || user?.rol || "Operador"}
+              </span>
+            )}
           </div>
 
           {isLoading ? (
             <div className="space-y-3">
-              <Skeleton className="h-4 w-full bg-green-100 rounded-lg" />
-              <Skeleton className="h-4 w-3/4 bg-green-100 rounded-lg" />
-              <Skeleton className="h-4 w-5/6 bg-green-100 rounded-lg" />
+              <div className="h-16 bg-gray-100 rounded-xl animate-pulse" />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="h-14 bg-gray-100 rounded-xl animate-pulse" />
+                <div className="h-14 bg-gray-100 rounded-xl animate-pulse" />
+              </div>
+              <div className="h-16 bg-gray-100 rounded-xl animate-pulse" />
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3">
-              <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-green-100/50 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2">
-                    <MapPin className="h-4 w-4 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 font-medium">Zona Asignada</p>
-                    <p className="text-sm font-bold text-gray-800">{profileData?.zona}</p>
-                  </div>
-                </div>
-              </div>
+            <div className="space-y-3">
+              <InfoCard
+                icon={MapPin}
+                label="Zona Asignada"
+                value={profileData?.zona}
+              />
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-green-100/50 shadow-sm">
-                  <div className="flex items-center gap-2 mb-1">
-                    <CreditCard className="h-3 w-3 text-green-500" />
-                    <p className="text-xs text-gray-500 font-medium">Código</p>
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <CreditCard className="h-3 w-3 text-gray-400" />
+                    <span className="text-xs text-gray-500">Código</span>
                   </div>
                   <p className="text-sm font-bold text-gray-800 truncate">
-                    {profileData?.codigo || user?.codigo || "Sin código"}
+                    {profileData?.codigo || user?.codigo || "—"}
                   </p>
                 </div>
 
-                <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-green-100/50 shadow-sm">
-                  <div className="flex items-center gap-2 mb-1">
-                    <IdCard className="h-3 w-3 text-green-500" />
-                    <p className="text-xs text-gray-500 font-medium">Cédula</p>
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <IdCard className="h-3 w-3 text-gray-400" />
+                    <span className="text-xs text-gray-500">Cédula</span>
                   </div>
-                  <p className="text-sm font-bold text-gray-800 truncate">{user?.cedula}</p>
+                  <p className="text-sm font-bold text-gray-800 truncate">{user?.cedula || "—"}</p>
                 </div>
               </div>
 
-              <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-green-100/50 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg p-2">
-                    <Users className="h-4 w-4 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 font-medium">Padrino Asignado</p>
-                    <p className="text-sm font-bold text-gray-800">{profileData?.padrino}</p>
-                  </div>
-                </div>
-              </div>
+              <InfoCard
+                icon={Users}
+                label="Padrino Asignado"
+                value={profileData?.padrino}
+                iconBg="bg-emerald-500"
+              />
             </div>
           )}
         </div>
 
-        <div className="p-6 border-t border-green-100/50 bg-white/50 backdrop-blur-sm">
-          <div className="grid grid-cols-1 gap-3">
-            <Button
-              variant="ghost"
-              onClick={confirmLogout}
-              className="bg-gradient-to-r from-gray-50 to-slate-50 hover:from-gray-100 hover:to-slate-100 text-gray-600 rounded-xl border border-gray-200/50 py-3 font-semibold shadow-sm transition-all duration-200 hover:shadow-md"
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Salir
-            </Button>
-          </div>
+        <div className="mt-auto p-6 border-t border-gray-100">
+          <Button
+            variant="ghost"
+            onClick={() => setShowLogoutConfirm(true)}
+            className="w-full bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-xl py-3 font-medium"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Cerrar Sesión
+          </Button>
         </div>
       </div>
 
-      {/* Logout Confirmation Dialog */}
       <AnimatePresence>
         {showLogoutConfirm && (
           <LogoutConfirmation
@@ -215,3 +232,5 @@ export default function DesktopSidebar({
     </>
   )
 }
+
+export default memo(DesktopSidebar)

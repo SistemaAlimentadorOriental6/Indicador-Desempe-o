@@ -1,85 +1,57 @@
 import type { Operator, TimeFilterType } from "../types/operator-types";
+import { clasificarBono, clasificarKm, determinarCategoriaFinal } from "./clasificacion-cualitativa";
 
-// Rangos de porcentajes para categorías de bonos
-const BONUS_RANGES = {
-  Oro: { min: 100, max: Infinity },
-  Plata: { min: 95, max: 100 },
-  Bronce: { min: 90, max: 95 },
-  Mejorar: { min: 60, max: 90 },
-  "Taller Conciencia": { min: 0, max: 60 },
-};
-
-// Rangos de porcentajes para categorías de kilómetros
-const KM_RANGES = {
-  Oro: { min: 94, max: Infinity },
-  Plata: { min: 90, max: 94 },
-  Bronce: { min: 85, max: 90 },
-  Mejorar: { min: 70, max: 85 },
-  "Taller Conciencia": { min: 0, max: 70 },
-};
-
-// Matriz de valoración cualitativa para determinar la categoría final
-const CATEGORY_MATRIX: Record<string, Record<string, string>> = {
-  Oro: {
-    Oro: "Oro",
-    Plata: "Plata",
-    Bronce: "Plata",
-    Mejorar: "Bronce",
-    "Taller Conciencia": "Bronce"
-  },
-  Plata: {
-    Oro: "Plata",
-    Plata: "Plata",
-    Bronce: "Bronce",
-    Mejorar: "Bronce",
-    "Taller Conciencia": "Bronce"
-  },
-  Bronce: {
-    Oro: "Plata",
-    Plata: "Plata",
-    Bronce: "Bronce",
-    Mejorar: "Bronce",
-    "Taller Conciencia": "Bronce"
-  },
-  Mejorar: {
-    Oro: "Mejorar",
-    Plata: "Mejorar",
-    Bronce: "Mejorar",
-    Mejorar: "Mejorar",
-    "Taller Conciencia": "Taller Conciencia"
-  },
-  "Taller Conciencia": {
-    Oro: "Taller Conciencia",
-    Plata: "Taller Conciencia",
-    Bronce: "Taller Conciencia",
-    Mejorar: "Taller Conciencia",
-    "Taller Conciencia": "Taller Conciencia"
-  }
-};
-
-// Determina la categoría de bono basada en el porcentaje
+// Funciones de compatibilidad que usan el nuevo sistema de clasificación
 export const determineBonusCategory = (percentage: number): string => {
-  for (const [category, range] of Object.entries(BONUS_RANGES)) {
-    if (percentage >= range.min && percentage < range.max) {
-      return category;
-    }
-  }
-  return "Taller Conciencia"; // Categoría por defecto
+  return clasificarBono(percentage);
 };
 
-// Determina la categoría de kilómetros basada en el porcentaje
 export const determineKmCategory = (percentage: number): string => {
-  for (const [category, range] of Object.entries(KM_RANGES)) {
-    if (percentage >= range.min && percentage < range.max) {
-      return category;
-    }
-  }
-  return "Taller Conciencia"; // Categoría por defecto
+  return clasificarKm(percentage);
 };
 
-// Determina la categoría final basada en la matriz de valoración cualitativa
 export const determineFinalCategory = (bonusCategory: string, kmCategory: string): string => {
-  return CATEGORY_MATRIX[bonusCategory]?.[kmCategory] || "Taller Conciencia";
+  // Esta función recibe las categorías ya clasificadas, no los porcentajes
+  // Usar la matriz directamente desde el nuevo sistema
+  const MATRIZ_CLASIFICACION: Record<string, Record<string, string>> = {
+    "Oro": {
+      "Oro": "Oro",
+      "Plata": "Plata",
+      "Bronce": "Plata",
+      "Mejorar": "Bronce",
+      "Taller Conciencia": "Bronce"
+    },
+    "Plata": {
+      "Oro": "Plata",
+      "Plata": "Plata",
+      "Bronce": "Bronce",
+      "Mejorar": "Bronce",
+      "Taller Conciencia": "Bronce"
+    },
+    "Bronce": {
+      "Oro": "Plata",
+      "Plata": "Bronce",
+      "Bronce": "Bronce",
+      "Mejorar": "Bronce",
+      "Taller Conciencia": "Bronce"
+    },
+    "Mejorar": {
+      "Oro": "Mejorar",
+      "Plata": "Mejorar",
+      "Bronce": "Mejorar",
+      "Mejorar": "Mejorar",
+      "Taller Conciencia": "Taller Conciencia"
+    },
+    "Taller Conciencia": {
+      "Oro": "Taller Conciencia",
+      "Plata": "Taller Conciencia",
+      "Bronce": "Taller Conciencia",
+      "Mejorar": "Taller Conciencia",
+      "Taller Conciencia": "Taller Conciencia"
+    }
+  };
+  
+  return MATRIZ_CLASIFICACION[bonusCategory]?.[kmCategory] || "Taller Conciencia";
 };
 
 // Interfaz para la respuesta de la API de rankings
