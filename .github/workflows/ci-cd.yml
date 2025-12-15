@@ -9,7 +9,7 @@ jobs:
   # Build y Test
   build:
     name: Build
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: self-hosted
     
     steps:
       - name: Checkout
@@ -34,7 +34,7 @@ jobs:
   # Deploy
   deploy:
     name: Deploy
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: self-hosted
     needs: [build]
     
     steps:
