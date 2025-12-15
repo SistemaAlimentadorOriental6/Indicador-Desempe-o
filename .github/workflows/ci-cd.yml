@@ -1,4 +1,4 @@
-name: CI/CD Medical App
+name: CI/CD Indicador Desempeño
 
 on:
   push:
@@ -25,8 +25,22 @@ jobs:
         with:
           version: 8
       
+      # Caché del store de pnpm para acelerar instalaciones
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+      
       - name: Install Dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
       
       - name: Build Application
         run: pnpm run build
@@ -60,9 +74,14 @@ jobs:
             git checkout main
           fi
       
+      # Configurar store de pnpm persistente en el servidor
+      - name: Configurar pnpm store
+        run: |
+          pnpm config set store-dir /var/www/.pnpm-store
+      
       - name: Instalar dependencias
         working-directory: /var/www/operaciones/indicador-desempeno
-        run: pnpm install
+        run: pnpm install --frozen-lockfile --prefer-offline
       
       - name: Build de la aplicación
         working-directory: /var/www/operaciones/indicador-desempeno
