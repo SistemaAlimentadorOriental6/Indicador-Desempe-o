@@ -77,6 +77,8 @@ jobs:
       # Configurar store de pnpm persistente en el servidor
       - name: Configurar pnpm store
         run: |
+          sudo mkdir -p /var/www/.pnpm-store
+          sudo chown -R $USER:$USER /var/www/.pnpm-store
           pnpm config set store-dir /var/www/.pnpm-store
       
       - name: Instalar dependencias
