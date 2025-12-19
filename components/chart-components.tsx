@@ -234,9 +234,6 @@ export const ThreeYearComparisonChart: React.FC<PropsTresAnios> = memo(({
               <div className={`text-2xl font-bold ${categoria.color}`}>
                 {yearData.rendimiento.toFixed(1)}%
               </div>
-              <div className={`text-xs font-medium ${categoria.color}`}>
-                {categoria.texto}
-              </div>
             </div>
           )
         })}
