@@ -251,7 +251,7 @@ export const ThreeYearComparisonChart: React.FC<PropsTresAnios> = memo(({
             {actual.toFixed(1)}%
           </div>
           <div className={`text-sm font-medium ${obtenerCategoria(actual).color}`}>
-            {obtenerCategoria(actual).texto.toUpperCase()}
+
           </div>
         </div>
       )}
