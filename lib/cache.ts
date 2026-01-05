@@ -1,5 +1,6 @@
 // Sistema de caché híbrido: Redis + fallback en memoria
 import RedisCache, { CACHE_TTL } from './redis-cache';
+import { getCacheManager } from './cache-manager';
 
 interface CacheEntry {
   data: any;
@@ -58,7 +59,7 @@ function generateCacheKey(prefix: string, params: Record<string, any>): string {
     .sort()
     .map(key => `${key}:${params[key]}`)
     .join('|');
-  
+
   return `${prefix}:${sortedParams}`;
 }
 
@@ -112,7 +113,7 @@ export class OptimizedCache {
     if (this.cache.size > this.maxSize) {
       const entries = Array.from(this.cache.entries());
       entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
-      
+
       const toDelete = entries.slice(0, this.cache.size - this.maxSize);
       toDelete.forEach(([key]) => this.cache.delete(key));
     }
@@ -130,27 +131,27 @@ export class OptimizedCache {
   // Obtener datos del caché
   get(key: string): any {
     const entry = this.cache.get(key);
-    
+
     if (entry) {
       const now = Date.now();
-      
+
       // Verificar si el elemento ha expirado
       if (now - entry.timestamp > entry.ttl) {
         this.cache.delete(key);
         this.missCount++;
         return undefined;
       }
-      
+
       this.hitCount++;
-      
+
       // Si los datos están comprimidos, descomprimirlos
       if (entry.compressed) {
         return decompressData(entry.data);
       }
-      
+
       return entry.data;
     }
-    
+
     this.missCount++;
     return undefined;
   }
@@ -160,10 +161,10 @@ export class OptimizedCache {
     try {
       const config = getConfigForType(type);
       const ttl = ttlSeconds ? ttlSeconds * 1000 : config.ttl;
-      
+
       let dataToStore = value;
       let compressed = false;
-      
+
       // Comprimir datos grandes si está habilitado
       if (config.compress && this.compressionEnabled) {
         const serialized = JSON.stringify(value);
@@ -172,21 +173,21 @@ export class OptimizedCache {
           compressed = true;
         }
       }
-      
+
       const entry: CacheEntry = {
         data: dataToStore,
         timestamp: Date.now(),
         ttl,
         compressed
       };
-      
+
       this.cache.set(key, entry);
-      
+
       // Limpiar si el caché está lleno
       if (this.cache.size > this.maxSize) {
         this.cleanup();
       }
-      
+
       return true;
     } catch (error) {
       console.error('Error al guardar en caché:', error);
@@ -210,10 +211,10 @@ export class OptimizedCache {
     // Si no está en caché, ejecutar la función fetcher
     try {
       const result = await fetcher();
-      
+
       // Guardar en caché el resultado
       this.set(key, result, ttlSeconds, type);
-      
+
       return result;
     } catch (error) {
       console.error('Error en getOrSet:', error);
@@ -225,13 +226,13 @@ export class OptimizedCache {
   has(key: string): boolean {
     const entry = this.cache.get(key);
     if (!entry) return false;
-    
+
     const now = Date.now();
     if (now - entry.timestamp > entry.ttl) {
       this.cache.delete(key);
       return false;
     }
-    
+
     return true;
   }
 
@@ -251,14 +252,14 @@ export class OptimizedCache {
   clearByPattern(pattern: string): number {
     let deletedCount = 0;
     const keys = Array.from(this.cache.keys());
-    
+
     keys.forEach(key => {
       if (key.includes(pattern)) {
         this.cache.delete(key);
         deletedCount++;
       }
     });
-    
+
     return deletedCount;
   }
 
@@ -266,7 +267,7 @@ export class OptimizedCache {
   getStats() {
     const total = this.hitCount + this.missCount;
     const hitRate = total > 0 ? (this.hitCount / total) * 100 : 0;
-    
+
     return {
       size: this.cache.size,
       maxSize: this.maxSize,
@@ -281,12 +282,12 @@ export class OptimizedCache {
   private getMemoryUsage(): string {
     try {
       let totalSize = 0;
-      
+
       for (const [key, entry] of this.cache.entries()) {
         totalSize += JSON.stringify(entry).length;
         totalSize += key.length;
       }
-      
+
       if (totalSize < 1024) {
         return `${totalSize} bytes`;
       } else if (totalSize < 1024 * 1024) {
@@ -316,21 +317,21 @@ export class OptimizedCache {
         }
       }
     });
-    
+
     await Promise.all(promises);
   }
 
   // Método para obtener múltiples claves
   getMultiple(keys: string[]): Record<string, any> {
     const result: Record<string, any> = {};
-    
+
     keys.forEach(key => {
       const value = this.get(key);
       if (value !== undefined) {
         result[key] = value;
       }
     });
-    
+
     return result;
   }
 
@@ -357,32 +358,15 @@ export class OptimizedCache {
   }
 }
 
-// Función helper para generar claves de caché
-export function createCacheKey(prefix: string, params: Record<string, any>): string {
-  return generateCacheKey(prefix, params);
-}
-
-// Crear instancia global del caché optimizado
+// Crear instancia global del caché optimizado (fallback)
 export const optimizedCache = new OptimizedCache();
 
-// Crear un caché básico para compatibilidad con el código existente
-export const cache = {
-  get: (key: string) => optimizedCache.get(key),
-  set: (key: string, value: any, ttlSeconds?: number) => optimizedCache.set(key, value, ttlSeconds),
-  has: (key: string) => optimizedCache.has(key),
-  delete: (key: string) => optimizedCache.delete(key),
-  clear: () => optimizedCache.clear(),
-  getStats: () => optimizedCache.getStats()
-};
-
-// Función helper para obtener instancia del caché
-export const getCache = () => optimizedCache;
+// Helper para obtener el caché híbrido configurado (Redis + fallback)
+export const getCache = () => getCacheManager();
 
 // Interfaces para tipado
 export interface CacheStats {
   keys: number
   hits: number
   misses: number
-  ksize: number
-  vsize: number
 } 

@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { ThreeYearComparisonChart } from "../chart-components"
 
 import { useKilometros, useBonificaciones, useDatosDisponibles } from "./hooks"
-import { obtenerBonoBaseAnual } from "./utils"
 
 interface PropsTarjetaProgresoAnual {
     userCode: string
@@ -18,216 +17,268 @@ interface PropsTarjetaProgresoAnual {
 const TarjetaProgresoAnualBase: React.FC<PropsTarjetaProgresoAnual> = ({ userCode }) => {
     const [anioSeleccionado, setAnioSeleccionado] = useState<number | null>(null)
 
-    // Obtener años disponibles (con cache compartido)
+    // 1. Obtener años disponibles
     const { aniosDisponibles, estaCargando: cargandoAnios } = useDatosDisponibles(userCode)
 
-    // Obtener datos del año seleccionado (con cache y deduplicación)
-    const { data: dataKm, estaCargando: cargandoKm, error: errorKm, recargar: recargarKm } = useKilometros(
-        userCode,
-        anioSeleccionado || undefined
-    )
+    // 2. Determinar el "Año Actual" real (el mas reciente con datos)
+    const anioActualReal = useMemo(() => {
+        if (aniosDisponibles.length === 0) return new Date().getFullYear();
+        return Math.max(...aniosDisponibles);
+    }, [aniosDisponibles]);
 
-    const { data: dataBonos, estaCargando: cargandoBonos, error: errorBonos } = useBonificaciones(
-        userCode,
-        anioSeleccionado || undefined
-    )
+    // 3. Determinar los años HISTÓRICOS a mostrar en la gráfica (excluyendo el actual)
+    const aniosGrafica = useMemo(() => {
+        if (aniosDisponibles.length === 0) return []
+        // Filtrar para excluir el año actual real, tomar los 3 siguientes más recientes y ordenar cronológicamente
+        return aniosDisponibles
+            .filter(y => y < anioActualReal)
+            .sort((a, b) => b - a)
+            .slice(0, 3)
+            .reverse()
+    }, [aniosDisponibles, anioActualReal])
 
-    // Cargar datos de últimos 3 años para la gráfica comparativa
-    const anioActual = new Date().getFullYear()
-    const aniosComparar = useMemo(() => [anioActual - 3, anioActual - 2, anioActual - 1], [anioActual])
-
-    // Hooks para cada año de comparación (cache evita llamadas duplicadas)
-    const { data: dataKm1 } = useKilometros(userCode, aniosComparar[0])
-    const { data: dataBonos1 } = useBonificaciones(userCode, aniosComparar[0])
-    const { data: dataKm2 } = useKilometros(userCode, aniosComparar[1])
-    const { data: dataBonos2 } = useBonificaciones(userCode, aniosComparar[1])
-    const { data: dataKm3 } = useKilometros(userCode, aniosComparar[2])
-    const { data: dataBonos3 } = useBonificaciones(userCode, aniosComparar[2])
-
-    // Seleccionar primer año disponible cuando se cargan
+    // 4. Autoseleccionar el año más reciente al cargar (para el dropdown y dato principal)
     useEffect(() => {
         if (!anioSeleccionado && aniosDisponibles.length > 0) {
-            setAnioSeleccionado(aniosDisponibles[0])
+            setAnioSeleccionado(anioActualReal)
         }
-    }, [aniosDisponibles, anioSeleccionado])
+    }, [aniosDisponibles, anioSeleccionado, anioActualReal])
 
-    // Calcular datos de últimos 3 años para gráfica
-    const datosUltimosTresAnios = useMemo(() => {
-        const procesarAnio = (year: number, dataKmYear: any, dataBonosYear: any) => {
-            const datosKmAnio = dataKmYear?.monthlyData?.filter((item: any) => item.year === year) || []
-            const totalKmEjecutado = datosKmAnio.reduce((sum: number, item: any) => sum + Number(item.valor_ejecucion || 0), 0)
-            const totalKmProgramado = datosKmAnio.reduce((sum: number, item: any) => sum + Number(item.valor_programacion || 0), 0)
-            const porcentajeKm = totalKmProgramado > 0 ? Number(((totalKmEjecutado / totalKmProgramado) * 100).toFixed(1)) : 0
+    // 5. Hooks para los datos de los 3 años HISTÓRICOS de la gráfica
+    const hY1 = useKilometros(userCode, aniosGrafica[0])
+    const hB1 = useBonificaciones(userCode, aniosGrafica[0])
+    const hY2 = useKilometros(userCode, aniosGrafica[1])
+    const hB2 = useBonificaciones(userCode, aniosGrafica[1])
+    const hY3 = useKilometros(userCode, aniosGrafica[2])
+    const hB3 = useBonificaciones(userCode, aniosGrafica[2])
 
-            const mesesConDatos = datosKmAnio.length
-            const baseParaAnio = obtenerBonoBaseAnual(year)
-            const totalBonoBase = baseParaAnio * mesesConDatos
-            const totalDeducciones = dataBonosYear?.summary?.totalDeduction || 0
-            const totalBonoFinal = totalBonoBase - totalDeducciones
-            const porcentajeBono = totalBonoBase > 0 ? Math.min(100, Math.max(0, Number(((totalBonoFinal / totalBonoBase) * 100).toFixed(1)))) : 100
+    // Hook para el año actual real (para mantener la barra 2025 siempre visible en la gráfica)
+    const hKmCurrent = useKilometros(userCode, anioActualReal)
+    const hBoCurrent = useBonificaciones(userCode, anioActualReal)
 
-            return {
-                year,
-                'eficiencia km (%)': porcentajeKm,
-                'eficiencia bonus (%)': porcentajeBono,
-                'rendimiento general (%)': Number(((porcentajeKm + porcentajeBono) / 2).toFixed(1))
+    // 5. Hook para el año seleccionado en el dropdown (para los indicadores grandes)
+    const hKmSel = useKilometros(userCode, anioSeleccionado || undefined)
+    const hBoSel = useBonificaciones(userCode, anioSeleccionado || undefined)
+
+    // Calcular rendimiento del año actual para la gráfica
+    const performanceActual = useMemo(() => {
+        if (!hKmCurrent.data || !hBoCurrent.data) return undefined
+
+        // Extraer listas
+        const kmList = hKmCurrent.data.data || hKmCurrent.data.monthlyData || []
+        const boList = hBoCurrent.data.monthlyBonusData || []
+
+        const tKmE = kmList.reduce((s: number, i: any) => s + Number(i.valor_ejecucion || 0), 0)
+        const tKmP = kmList.reduce((s: number, i: any) => s + Number(i.valor_programacion || 0), 0)
+        const pKm = tKmP > 0 ? (tKmE / tKmP) * 100 : 0
+
+        const tBoBase = boList.reduce((s: number, i: any) => s + Number(i.bonusValue || 0), 0)
+        const tBoFinal = boList.reduce((s: number, i: any) => s + Number(i.finalValue || 0), 0)
+        const pBo = tBoBase > 0 ? (tBoFinal / tBoBase) * 100 : (boList.length > 0 ? 100 : 0)
+
+        return Number(((pKm + pBo) / 2).toFixed(1))
+    }, [hKmCurrent.data, hBoCurrent.data])
+
+    // Procesar datos para la comparativa (años históricos)
+    const datosComparativa = useMemo(() => {
+        const calcularRendimiento = (kmResponse: any, boResponse: any) => {
+            if (!kmResponse || !boResponse) return 0
+
+            // Extraer arrays de datos de forma segura
+            const kmList = kmResponse.data || kmResponse.monthlyData || []
+            const boList = boResponse.monthlyBonusData || [] // Bonos usa monthlyBonusData
+
+            // Si no hay listas, intentar usar summaries si están disponibles como fallback
+            if (kmList.length === 0 && kmResponse.summary) {
+                // Fallback a summary si no hay lista (raro pero posible)
             }
+
+            // Calcular Kilómetros
+            const tKmE = kmList.reduce((s: number, i: any) => s + Number(i.valor_ejecucion || 0), 0)
+            const tKmP = kmList.reduce((s: number, i: any) => s + Number(i.valor_programacion || 0), 0)
+            const pKm = tKmP > 0 ? (tKmE / tKmP) * 100 : 0
+
+            // Calcular Bonos
+            const tBoBase = boList.reduce((s: number, i: any) => s + Number(i.bonusValue || 0), 0)
+            const tBoFinal = boList.reduce((s: number, i: any) => s + Number(i.finalValue || 0), 0)
+            const pBo = tBoBase > 0 ? (tBoFinal / tBoBase) * 100 : (boList.length > 0 ? 100 : 0)
+
+            return Number(((pKm + pBo) / 2).toFixed(1))
         }
 
-        if (!dataKm1 && !dataKm2 && !dataKm3) return []
-
-        return [
-            procesarAnio(aniosComparar[0], dataKm1, dataBonos1),
-            procesarAnio(aniosComparar[1], dataKm2, dataBonos2),
-            procesarAnio(aniosComparar[2], dataKm3, dataBonos3),
+        const hooks = [
+            { year: aniosGrafica[0], km: hY1.data, bo: hB1.data },
+            { year: aniosGrafica[1], km: hY2.data, bo: hB2.data },
+            { year: aniosGrafica[2], km: hY3.data, bo: hB3.data },
         ]
-    }, [aniosComparar, dataKm1, dataBonos1, dataKm2, dataBonos2, dataKm3, dataBonos3])
 
-    // Calcular datos anuales del año seleccionado
-    const datosAnuales = useMemo(() => {
-        if (!dataKm?.monthlyData || !dataBonos || !anioSeleccionado) return null
+        return hooks
+            .map(({ year, km, bo }) => {
+                if (!year) return null
+                return {
+                    year,
+                    'rendimiento general (%)': calcularRendimiento(km, bo)
+                }
+            })
+            .filter(Boolean)
+    }, [aniosGrafica, hY1.data, hB1.data, hY2.data, hB2.data, hY3.data, hB3.data])
 
-        const datosKmAnio = dataKm.monthlyData.filter((item: any) => item.year === anioSeleccionado)
-        const totalKmEjecutado = datosKmAnio.reduce((sum: number, item: any) => sum + Number(item.valor_ejecucion || 0), 0)
-        const totalKmProgramado = datosKmAnio.reduce((sum: number, item: any) => sum + Number(item.valor_programacion || 0), 0)
-        const porcentajeKm = totalKmProgramado > 0 ? Number(((totalKmEjecutado / totalKmProgramado) * 100).toFixed(1)) : 0
+    // Datos para la sección de indicadores
+    const indicadores = useMemo(() => {
+        if (!hKmSel.data || !hBoSel.data || !anioSeleccionado) return null
 
-        const mesesConDatos = datosKmAnio.length
-        const baseParaAnio = obtenerBonoBaseAnual(anioSeleccionado)
-        const totalBonoBase = baseParaAnio * mesesConDatos
-        const totalDeducciones = dataBonos.summary?.totalDeduction ?? 0
-        const totalBonoFinal = totalBonoBase - totalDeducciones
-        const porcentajeBono = totalBonoBase > 0 ? Math.min(100, Number(((totalBonoFinal / totalBonoBase) * 100).toFixed(1))) : 100
+        // Extraer listas
+        const kmList = hKmSel.data.data || hKmSel.data.monthlyData || []
+        const boList = hBoSel.data.monthlyBonusData || []
+
+        // Calcular Kilómetros
+        const tKmE = kmList.reduce((s: number, i: any) => s + Number(i.valor_ejecucion || 0), 0)
+        const tKmP = kmList.reduce((s: number, i: any) => s + Number(i.valor_programacion || 0), 0)
+        const pKm = tKmP > 0 ? (tKmE / tKmP) * 100 : 0
+
+        // Calcular Bonos
+        const tBoBase = boList.reduce((s: number, i: any) => s + Number(i.bonusValue || 0), 0)
+        const tBoFinal = boList.reduce((s: number, i: any) => s + Number(i.finalValue || 0), 0)
+        const pBo = tBoBase > 0 ? (tBoFinal / tBoBase) * 100 : (boList.length > 0 ? 100 : 0)
 
         return {
-            year: anioSeleccionado,
-            kilometers: { percentage: porcentajeKm },
-            bonus: { percentage: porcentajeBono },
-            combinedPercentage: Number(((porcentajeKm + porcentajeBono) / 2).toFixed(1)),
-            monthsWithData: mesesConDatos,
+            combined: Number(((pKm + pBo) / 2).toFixed(1)),
+            km: Number(pKm.toFixed(1)),
+            bo: Number(pBo.toFixed(1)),
+            months: kmList.length
         }
-    }, [dataKm?.monthlyData, dataBonos, anioSeleccionado])
+    }, [hKmSel.data, hBoSel.data, anioSeleccionado])
 
-    const handleAnioChange = useCallback((v: string) => {
-        setAnioSeleccionado(Number(v))
-    }, [])
+    const estaCargando = cargandoAnios || (hKmSel.estaCargando && !hKmSel.data)
+    const error = hKmSel.error || hBoSel.error
 
-    const estaCargando = cargandoAnios || (cargandoKm && !dataKm) || (cargandoBonos && !dataBonos)
-    const error = errorKm || errorBonos
-
-    if (estaCargando) {
-        return (
-            <Card className="bg-white shadow-sm h-full">
-                <CardHeader className="pb-3">
-                    <Skeleton className="h-5 w-36" />
-                    <Skeleton className="h-4 w-48 mt-1" />
-                </CardHeader>
-                <CardContent>
-                    <Skeleton className="h-32 w-full mb-3" />
-                    <Skeleton className="h-20 w-full" />
-                </CardContent>
-            </Card>
-        )
-    }
-
-    if (error) {
-        return (
-            <Card className="bg-white shadow-sm h-full">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-base font-semibold flex items-center text-red-600">
-                        <AlertTriangle className="h-4 w-4 mr-2" />
-                        Error al cargar
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-green-600 text-sm">{error}</p>
-                    <Button variant="outline" size="sm" className="mt-3" onClick={recargarKm}>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Reintentar
-                    </Button>
-                </CardContent>
-            </Card>
-        )
-    }
+    if (estaCargando) return <SkeletonTarjeta />
 
     return (
-        <Card className="bg-white shadow-sm h-full">
-            <CardHeader className="pb-3">
+        <Card className="bg-white shadow-sm border-gray-100 h-full overflow-hidden">
+            <CardHeader className="pb-2 px-4 pt-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="p-1.5 bg-green-500 rounded-md">
+                        <div className="p-1.5 bg-green-500 rounded-lg shadow-sm">
                             <TrendingUp className="h-4 w-4 text-white" />
                         </div>
                         <div>
-                            <CardTitle className="text-base font-semibold text-green-700">Progreso Anual</CardTitle>
-                            <CardDescription className="text-green-600/70 text-xs">Últimos 3 años</CardDescription>
+                            <CardTitle className="text-base font-bold text-gray-800">Progreso Anual</CardTitle>
+                            <CardDescription className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Historial de Evolución</CardDescription>
                         </div>
                     </div>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={recargarKm}
-                        className="h-8 px-2 hover:bg-green-50"
-                        disabled={cargandoKm}
-                    >
-                        <RefreshCw className={`h-3.5 w-3.5 text-green-600 ${cargandoKm ? 'animate-spin' : ''}`} />
+                    <Button variant="ghost" size="icon" onClick={() => hKmSel.recargar()} className="h-8 w-8 hover:bg-green-50 rounded-full">
+                        <RefreshCw className={`h-4 w-4 text-green-600 ${hKmSel.estaCargando ? 'animate-spin' : ''}`} />
                     </Button>
                 </div>
             </CardHeader>
 
-            <CardContent className="space-y-4">
-                <Select value={anioSeleccionado?.toString() || ""} onValueChange={handleAnioChange}>
-                    <SelectTrigger className="h-8 text-sm">
-                        <SelectValue placeholder="Año" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {aniosDisponibles.map((year: number) => (
-                            <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-
-                <ThreeYearComparisonChart
-                    data={datosUltimosTresAnios}
-                    isLoading={false}
-                    currentYearPerformance={datosAnuales?.combinedPercentage}
-                />
-
-                <div className="space-y-3">
-                    <div className="text-center">
-                        <div className="text-2xl font-bold text-green-700">{datosAnuales?.combinedPercentage || 0}%</div>
-                        <div className="text-xs text-green-600/70">Rendimiento {anioSeleccionado}</div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <div>
-                            <div className="flex justify-between text-xs mb-1">
-                                <span className="text-green-700">Kilómetros</span>
-                                <span className="font-medium text-green-700">{datosAnuales?.kilometers.percentage || 0}%</span>
-                            </div>
-                            <div className="w-full bg-green-100 rounded-full h-1.5">
-                                <div className="h-full bg-green-500 rounded-full" style={{ width: `${Math.min(100, datosAnuales?.kilometers.percentage || 0)}%` }} />
-                            </div>
-                        </div>
-                        <div>
-                            <div className="flex justify-between text-xs mb-1">
-                                <span className="text-green-700">Bonificaciones</span>
-                                <span className="font-medium text-green-700">{datosAnuales?.bonus.percentage || 0}%</span>
-                            </div>
-                            <div className="w-full bg-green-100 rounded-full h-1.5">
-                                <div className="h-full bg-green-500 rounded-full" style={{ width: `${Math.min(100, datosAnuales?.bonus.percentage || 0)}%` }} />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="text-center pt-2">
-                        <span className="text-xs text-green-600/70">Meses con datos: </span>
-                        <span className="text-sm font-medium text-green-700">{datosAnuales?.monthsWithData || 0}/12</span>
-                    </div>
+            <CardContent className="px-4 pb-5 space-y-4">
+                <div className="pt-2">
+                    <Select value={anioSeleccionado?.toString()} onValueChange={(v) => setAnioSeleccionado(Number(v))}>
+                        <SelectTrigger className="h-9 border-gray-200 bg-gray-50/50 font-medium text-sm">
+                            <SelectValue placeholder="Año" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {aniosDisponibles.map(y => (
+                                <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
+
+                <div className="bg-gray-50/30 rounded-2xl p-2 border border-gray-100/50">
+                    <ThreeYearComparisonChart
+                        data={datosComparativa as any}
+                        isLoading={false}
+                        referenceYear={anioActualReal}
+                        currentYearPerformance={performanceActual} // Usar el calculado específicamente para la gráfica
+                    />
+                </div>
+
+                {indicadores && (
+                    <div className="space-y-4 pt-2">
+                        <div className="text-center relative">
+                            <div className="text-4xl font-black text-gray-800 tracking-tighter">
+                                {indicadores.combined}%
+                            </div>
+                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                                Rendimiento Promedio {anioSeleccionado}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3">
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-end px-1">
+                                    <span className="text-[11px] font-bold text-gray-500 uppercase">Kilómetros</span>
+                                    <span className="text-sm font-black text-green-600">{indicadores.km}%</span>
+                                </div>
+                                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-green-500 rounded-full transition-all duration-1000 shadow-[0_0_8px_rgba(34,197,94,0.4)]"
+                                        style={{ width: `${Math.min(100, indicadores.km)}%` }}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-end px-1">
+                                    <span className="text-[11px] font-bold text-gray-500 uppercase">Bonificaciones</span>
+                                    <span className="text-sm font-black text-green-600">{indicadores.bo}%</span>
+                                </div>
+                                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-green-500 rounded-full transition-all duration-1000 shadow-[0_0_8px_rgba(34,197,94,0.4)]"
+                                        style={{ width: `${Math.min(100, indicadores.bo)}%` }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-between items-center bg-green-50/50 rounded-xl p-3 border border-green-100/50">
+                            <span className="text-[10px] font-bold text-green-600/70 uppercase">Meses procesados</span>
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-sm font-black text-green-700">{indicadores.months}</span>
+                                <span className="text-[10px] font-bold text-green-600/40">/ 12</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {error && (
+                    <div className="bg-red-50 p-3 rounded-xl border border-red-100 flex items-center gap-3">
+                        <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                        <p className="text-[11px] text-red-600 font-medium leading-tight">{error}</p>
+                    </div>
+                )}
             </CardContent>
         </Card>
     )
 }
+
+const SkeletonTarjeta = () => (
+    <Card className="bg-white shadow-sm h-full">
+        <CardHeader className="pb-3 px-4 pt-4">
+            <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-lg" />
+                <div className="space-y-1">
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-3 w-16" />
+                </div>
+            </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-5 space-y-4">
+            <Skeleton className="h-9 w-full rounded-lg" />
+            <Skeleton className="h-40 w-full rounded-2xl" />
+            <div className="space-y-4">
+                <Skeleton className="h-10 w-1/2 mx-auto rounded-lg" />
+                <div className="space-y-3">
+                    <Skeleton className="h-5 w-full rounded-full" />
+                    <Skeleton className="h-5 w-full rounded-full" />
+                </div>
+            </div>
+        </CardContent>
+    </Card>
+)
 
 export const TarjetaProgresoAnual = memo(TarjetaProgresoAnualBase)

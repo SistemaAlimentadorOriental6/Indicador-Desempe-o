@@ -69,7 +69,7 @@ class BonusesService {
   private db = getDatabase()
   private cache = getCacheManager()
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): BonusesService {
     if (!BonusesService.instance) {
@@ -114,7 +114,7 @@ class BonusesService {
       FROM novedades
       WHERE codigo_empleado = ?
     `
-    
+
     const queryParams: any[] = [params.userCode]
 
     // Agregar filtros de fecha
@@ -127,10 +127,10 @@ class BonusesService {
         (fecha_inicio_novedad <= LAST_DAY(?) AND 
          (fecha_fin_novedad IS NULL OR fecha_fin_novedad >= ?))
       )`
-      
+
       const firstDayOfMonth = `${params.year}-${String(params.month).padStart(2, '0')}-01`
       const lastDayOfMonth = new Date(params.year, params.month, 0).toISOString().split('T')[0]
-      
+
       queryParams.push(params.year, params.month, params.year, params.month, lastDayOfMonth, firstDayOfMonth)
     } else if (params.year) {
       query += " AND YEAR(fecha_inicio_novedad) = ?"
@@ -187,57 +187,110 @@ class BonusesService {
         message: hasNoDeductions ? "Sin deducciones - Bono completo" : undefined
       }
     } else if (params.year && !params.month) {
-      // Si solo se especifica el año, generar datos mensuales para todo el año
+      // ✅ OPTIMIZACIÓN: Obtener todas las novedades del año en UNA SOLA consulta
+      const yearQuery = `
+        SELECT id, fecha_inicio_novedad, fecha_fin_novedad, codigo_empleado, codigo_factor, 
+               observaciones,
+               DATEDIFF(IFNULL(fecha_fin_novedad, CURDATE()), fecha_inicio_novedad) + 1 as dias_novedad
+        FROM novedades
+        WHERE codigo_empleado = ?
+          AND (
+            YEAR(fecha_inicio_novedad) = ? OR 
+            (fecha_fin_novedad IS NOT NULL AND YEAR(fecha_fin_novedad) = ?) OR
+            (fecha_inicio_novedad <= ? AND (fecha_fin_novedad IS NULL OR fecha_fin_novedad >= ?))
+          )
+        ORDER BY fecha_inicio_novedad DESC
+      `
+
+      const lastDayOfYear = `${params.year}-12-31`
+      const firstDayOfYear = `${params.year}-01-01`
+
+      const allYearNovedades = await this.db.executeQuery<any[]>(yearQuery, [
+        params.userCode, params.year, params.year, lastDayOfYear, firstDayOfYear
+      ])
+
       monthlyBonusData = []
-      
-      for (let month = 1; month <= 12; month++) {
-        // Obtener deducciones específicas para este mes
-        const monthQuery = `
-          SELECT id, fecha_inicio_novedad, fecha_fin_novedad, codigo_empleado, codigo_factor, 
-                 observaciones,
-                 DATEDIFF(IFNULL(fecha_fin_novedad, CURDATE()), fecha_inicio_novedad) + 1 as dias_novedad
-          FROM novedades
-          WHERE codigo_empleado = ?
-            AND (
-              (YEAR(fecha_inicio_novedad) = ? AND MONTH(fecha_inicio_novedad) = ?) OR
-              (fecha_fin_novedad IS NOT NULL AND 
-               YEAR(fecha_fin_novedad) = ? AND MONTH(fecha_fin_novedad) = ?) OR
-              (fecha_inicio_novedad <= LAST_DAY(?) AND 
-               (fecha_fin_novedad IS NULL OR fecha_fin_novedad >= ?))
-            )
-          ORDER BY fecha_inicio_novedad DESC
-        `
-        
-        const firstDayOfMonth = `${params.year}-${String(month).padStart(2, '0')}-01`
-        const lastDayOfMonth = new Date(params.year, month, 0).toISOString().split('T')[0]
-        
-        const monthNovedades = await this.db.executeQuery<any[]>(monthQuery, [
-          params.userCode, params.year, month, params.year, month, lastDayOfMonth, firstDayOfMonth
-        ])
-        
-        // Procesar deducciones del mes
+
+      // Consultar meses disponibles en KMS para este año para marcar el límite real
+      const kmsMonthsQuery = `
+        SELECT DISTINCT MONTH(fecha_inicio_programacion) as month
+        FROM variables_control
+        WHERE codigo_empleado = ? AND YEAR(fecha_inicio_programacion) = ?
+          AND codigo_variable = 'KMS'
+      `
+      const kmsResult = await this.db.executeQuery<any[]>(kmsMonthsQuery, [params.userCode, params.year])
+      const kmsMonths = kmsResult.map(r => r.month)
+
+      const hoy = new Date()
+      const esAnioActual = params.year === hoy.getFullYear()
+      const mesActualSist = hoy.getMonth() + 1
+
+      // El límite es el mes más alto de KMS (datos reales)
+      let limitMonth = kmsMonths.length > 0 ? Math.max(...kmsMonths) : (esAnioActual ? mesActualSist : 12)
+
+      // Protección: En el año actual no mostramos futuro, y en años pasados si no hay NADA de KMS asumimos 12
+      if (esAnioActual) limitMonth = Math.min(limitMonth, mesActualSist)
+
+      for (let month = 1; month <= limitMonth; month++) {
+        // Filtrar novedades para este mes específico en memoria
+        const firstDayOfMonth = new Date(params.year, month - 1, 1)
+        const lastDayOfMonth = new Date(params.year, month, 0)
+
+        const monthNovedades = allYearNovedades.filter(n => {
+          const start = new Date(n.fecha_inicio_novedad)
+          const end = n.fecha_fin_novedad ? new Date(n.fecha_fin_novedad) : new Date()
+
+          return (start <= lastDayOfMonth && end >= firstDayOfMonth)
+        })
+
         const monthDeductions = this.processDeductions(monthNovedades, baseBonus)
         const monthDeductionAmount = Math.min(
           monthDeductions.reduce((sum, d) => sum + d.monto, 0),
           baseBonus
         )
-        const monthFinalBonus = baseBonus - monthDeductionAmount
-        
+
         monthlyBonusData.push({
-          year: currentYear,
+          year: params.year,
           month: month,
           monthName: monthNames[month - 1],
           bonusValue: baseBonus,
           deductionAmount: monthDeductionAmount,
-          finalValue: monthFinalBonus,
+          finalValue: baseBonus - monthDeductionAmount,
           hasDeductions: monthNovedades.length > 0
         })
       }
-      
+
       lastMonthData = this.getLastMonthData(novedades, params.userCode)
     } else {
       lastMonthData = this.getLastMonthData(novedades, params.userCode)
     }
+
+    // Calcular resumen final basado en si se procesó el año completo o un mes específico
+    // Calcular resumen final
+    let summaryData = monthlyBonusData || []
+
+    // Si estamos en el año actual, solo considerar meses transcurridos hasta la fecha
+    const today = new Date()
+    if (params.year === today.getFullYear() && monthlyBonusData) {
+      const currentMonthIndex = today.getMonth() + 1
+      summaryData = monthlyBonusData.filter(m => m.month <= currentMonthIndex)
+    }
+
+    const summary = monthlyBonusData
+      ? {
+        totalProgrammed: summaryData.reduce((sum, m) => sum + m.bonusValue, 0),
+        totalExecuted: summaryData.reduce((sum, m) => sum + m.finalValue, 0),
+        percentage: 0
+      }
+      : {
+        totalProgrammed: baseBonus,
+        totalExecuted: finalBonus,
+        percentage: 0
+      }
+
+    summary.percentage = summary.totalProgrammed > 0
+      ? parseFloat(((summary.totalExecuted / summary.totalProgrammed) * 100).toFixed(2))
+      : 100
 
     return {
       baseBonus,
@@ -251,11 +304,7 @@ class BonusesService {
       lastMonthData,
       availableYears,
       availableMonths,
-      summary: {
-        totalProgrammed: baseBonus,
-        totalExecuted: finalBonus,
-        percentage: parseFloat(((finalBonus / baseBonus) * 100).toFixed(2)),
-      },
+      summary
     }
   }
 
@@ -306,7 +355,7 @@ class BonusesService {
           observaciones: novedad.observaciones,
         }
       })
-      // ✅ Mantener todas las deducciones en la lista para mostrarlas, pero solo las que afectan desempeño tendrán monto > 0
+    // ✅ Mantener todas las deducciones en la lista para mostrarlas, pero solo las que afectan desempeño tendrán monto > 0
   }
 
   // Calcular días de expiración
@@ -320,7 +369,7 @@ class BonusesService {
     const today = new Date()
     const diffTime = expirationDate.getTime() - today.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    
+
     return Math.max(0, diffDays)
   }
 
@@ -371,7 +420,7 @@ class BonusesService {
         WHERE codigo_empleado = ? 
         ORDER BY year DESC, month DESC
       `
-      
+
       const novedadesResult = await this.db.executeQuery<Array<{ year: number; month: number }>>(
         novedadesQuery,
         [userCode]
@@ -379,7 +428,7 @@ class BonusesService {
 
       // Agrupar por año y contar meses únicos con novedades
       const yearMonthMap = new Map<number, Set<number>>()
-      
+
       novedadesResult.forEach((row) => {
         if (!yearMonthMap.has(row.year)) {
           yearMonthMap.set(row.year, new Set())
@@ -396,15 +445,15 @@ class BonusesService {
       // Para cada año desde 2020 hasta el año actual
       for (let year = 2020; year <= currentYear; year++) {
         let monthsInYear = 12
-        
+
         // Si es el año actual, solo contar hasta el mes actual
         if (year === currentYear) {
           monthsInYear = currentMonth
         }
-        
+
         // Obtener meses con novedades para este año
         const _monthsWithNovedades = yearMonthMap.get(year)?.size || 0
-        
+
         // Los bonos disponibles son los meses totales del año
         // (todos los meses cuentan, tengan o no deducciones)
         bonusesByYear[year.toString()] = monthsInYear
@@ -413,16 +462,16 @@ class BonusesService {
       return bonusesByYear
     } catch (error) {
       console.error('[Bonos] Error al obtener bonos por año:', error)
-      
+
       // En caso de error, devolver datos por defecto
       const currentYear = new Date().getFullYear()
       const currentMonth = new Date().getMonth() + 1
       const defaultBonuses: Record<string, number> = {}
-      
+
       for (let year = 2020; year <= currentYear; year++) {
         defaultBonuses[year.toString()] = year === currentYear ? currentMonth : 12
       }
-      
+
       return defaultBonuses
     }
   }
@@ -436,26 +485,26 @@ class BonusesService {
         WHERE codigo_empleado = ? 
         ORDER BY year DESC
       `
-      
+
       const result = await this.db.executeQuery<Array<{ year: number }>>(query, [userCode])
       const dbYears = result.map(r => r.year).filter(y => y !== null && y !== undefined)
-      
+
       // Si hay años en la base de datos, devolverlos
       if (dbYears.length > 0) {
         return dbYears
       }
-      
+
       // Si no hay años en la base de datos, devolver años por defecto
       // Incluir el año actual y los 4 años anteriores
       const currentYear = new Date().getFullYear()
       const defaultYears = Array.from({ length: 6 }, (_, i) => currentYear - i)
-      
+
       console.log(`[Bonos] No se encontraron años en BD para usuario ${userCode}, usando años por defecto:`, defaultYears)
       return defaultYears
-      
+
     } catch (error) {
       console.error(`[Bonos] Error al obtener años disponibles para usuario ${userCode}:`, error)
-      
+
       // En caso de error, devolver años por defecto
       const currentYear = new Date().getFullYear()
       return Array.from({ length: 6 }, (_, i) => currentYear - i)
@@ -551,10 +600,10 @@ class BonusesService {
     return this.cache.getOrSet(
       cacheKey,
       async () => {
-        const bonusData = await this.getUserBonuses({ 
-          userCode, 
-          year: currentYear, 
-          month: currentMonth 
+        const bonusData = await this.getUserBonuses({
+          userCode,
+          year: currentYear,
+          month: currentMonth
         })
 
         return {

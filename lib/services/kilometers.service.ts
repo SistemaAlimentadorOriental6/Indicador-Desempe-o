@@ -29,7 +29,7 @@ class KilometersService {
   private db = getDatabase()
   private cache = getCache()
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): KilometersService {
     if (!KilometersService.instance) {
@@ -90,57 +90,29 @@ class KilometersService {
     year?: number
     month?: number
   }): Promise<KilometersResponse> {
-    // Query principal para obtener datos de kilómetros
+    // ✅ OPTIMIZACIÓN: Consulta simple sin cross-joins pesados
     let query = `
       SELECT 
-        vc.codigo_variable,
-        vc.codigo_empleado,
-        vc.valor_programacion,
-        vc.valor_ejecucion,
-        months.month_date,
-        YEAR(months.month_date) as year,
-        MONTH(months.month_date) as month,
-        vc.fecha_inicio_programacion,
-        vc.fecha_fin_programacion
-      FROM variables_control vc
-      JOIN (
-        SELECT 
-          vc2.codigo_empleado,
-          DATE_ADD(vc2.fecha_inicio_programacion, 
-            INTERVAL (t4.num*1000 + t3.num*100 + t2.num*10 + t1.num) MONTH
-          ) as month_date
-        FROM variables_control vc2,
-          (SELECT 0 as num UNION SELECT 1 UNION SELECT 2 UNION SELECT 3) t1,
-          (SELECT 0 as num UNION SELECT 4 UNION SELECT 8) t2,
-          (SELECT 0 as num UNION SELECT 6) t3,
-          (SELECT 0 as num) t4
-        WHERE 
-          vc2.codigo_variable = 'KMS'
-          AND DATE_ADD(vc2.fecha_inicio_programacion, 
-                      INTERVAL (t4.num*1000 + t3.num*100 + t2.num*10 + t1.num) MONTH) 
-                      <= COALESCE(vc2.fecha_fin_programacion, CURDATE())
-      ) months ON vc.codigo_empleado = months.codigo_empleado
-        AND months.month_date BETWEEN 
-          vc.fecha_inicio_programacion AND 
-          COALESCE(vc.fecha_fin_programacion, CURDATE())
-      WHERE vc.codigo_variable = 'KMS'
-      AND vc.codigo_empleado = ?
+        codigo_variable,
+        codigo_empleado,
+        valor_programacion,
+        valor_ejecucion,
+        fecha_inicio_programacion,
+        fecha_fin_programacion
+      FROM variables_control
+      WHERE codigo_variable = 'KMS'
+      AND codigo_empleado = ?
     `
 
     const queryParams: any[] = [params.userCode]
 
-    // Agregar filtros de fecha
+    // Filtrar por año en la consulta si se especifica
     if (params.year) {
-      query += " AND YEAR(months.month_date) = ?"
-      queryParams.push(params.year)
+      query += " AND (YEAR(fecha_inicio_programacion) = ? OR (fecha_fin_programacion IS NOT NULL AND YEAR(fecha_fin_programacion) = ?) OR (YEAR(fecha_inicio_programacion) <= ? AND (fecha_fin_programacion IS NULL OR YEAR(fecha_fin_programacion) >= ?)))"
+      queryParams.push(params.year, params.year, params.year, params.year)
     }
 
-    if (params.month) {
-      query += " AND MONTH(months.month_date) = ?"
-      queryParams.push(params.month)
-    }
-
-    query += " ORDER BY months.month_date DESC"
+    query += " ORDER BY fecha_inicio_programacion DESC"
 
     // Ejecutar consultas en paralelo
     const [rawData, years, months] = await Promise.all([
@@ -150,7 +122,19 @@ class KilometersService {
     ])
 
     // Procesar datos
-    const processedData = this.processKilometersData(rawData)
+    let processedData = this.processKilometersData(rawData, params.year, params.month)
+
+    // Filtrar para mostrar solo meses que realmente existen en el sistema para ese año
+    if (params.year && !params.month && months.length > 0) {
+      processedData = processedData.filter(d => months.includes(d.month))
+    }
+
+    // Si es el año actual, limitamos por seguridad al mes presente
+    const hoy = new Date()
+    if (params.year === hoy.getFullYear() && !params.month) {
+      const mesActual = hoy.getMonth() + 1
+      processedData = processedData.filter(d => d.month <= mesActual)
+    }
     const summary = this.calculateSummary(processedData)
 
     return {
@@ -201,17 +185,17 @@ class KilometersService {
     const [rawData, years, months] = await Promise.all([
       this.db.executeQuery<any[]>(query, queryParams),
       dbHelpers.getAvailableYears('variables_control', 'fecha_inicio_programacion', "codigo_variable = 'KMS'"),
-      params.year 
+      params.year
         ? dbHelpers.getAvailableMonths(
-            'variables_control', 
-            'fecha_inicio_programacion', 
-            "codigo_variable = 'KMS' AND YEAR(fecha_inicio_programacion) = ?",
-            [params.year]
-          )
+          'variables_control',
+          'fecha_inicio_programacion',
+          "codigo_variable = 'KMS' AND YEAR(fecha_inicio_programacion) = ?",
+          [params.year]
+        )
         : []
     ])
 
-    const processedData = this.processKilometersData(rawData)
+    const processedData = this.processKilometersData(rawData, params.year, params.month)
     const summary = this.calculateSummary(processedData)
 
     return {
@@ -222,33 +206,55 @@ class KilometersService {
     }
   }
 
-  // Procesar datos de kilómetros
-  private processKilometersData(rawData: any[]): KilometersData[] {
-    const groupedData = rawData.reduce((acc: any, item) => {
-      const key = `${item.year}-${String(item.month).padStart(2, "0")}`
-      
-      if (!acc[key]) {
-        acc[key] = {
-          year: item.year,
-          month: item.month,
-          monthName: this.getMonthName(item.month),
-          valor_programacion: 0,
-          valor_ejecucion: 0,
-          registros: [],
+  // Procesar datos de kilómetros expandiendo rangos de fechas
+  private processKilometersData(rawData: any[], filterYear?: number, filterMonth?: number): KilometersData[] {
+    const groupedData: Record<string, any> = {}
+
+    rawData.forEach((item) => {
+      const start = new Date(item.fecha_inicio_programacion)
+      const end = item.fecha_fin_programacion ? new Date(item.fecha_fin_programacion) : new Date()
+
+      // Normalizar fechas al primer día del mes para facilitar iteración
+      let currentIter = new Date(start.getFullYear(), start.getMonth(), 1)
+      const lastMonthDate = new Date(end.getFullYear(), end.getMonth(), 1)
+
+      while (currentIter <= lastMonthDate) {
+        const year = currentIter.getFullYear()
+        const month = currentIter.getMonth() + 1
+
+        // Verificar si este mes debe ser incluido según filtros
+        const matchYear = !filterYear || year === filterYear
+        const matchMonth = !filterMonth || month === filterMonth
+
+        if (matchYear && matchMonth) {
+          const key = `${year}-${String(month).padStart(2, "0")}`
+
+          if (!groupedData[key]) {
+            groupedData[key] = {
+              year,
+              month,
+              monthName: this.getMonthName(month),
+              valor_programacion: 0,
+              valor_ejecucion: 0,
+              registros: [],
+            }
+          }
+
+          // Sumar valores
+          groupedData[key].valor_programacion += Number(item.valor_programacion) || 0
+          groupedData[key].valor_ejecucion += Number(item.valor_ejecucion) || 0
+          groupedData[key].registros.push(item)
         }
+
+        // Avanzar al siguiente mes
+        currentIter.setMonth(currentIter.getMonth() + 1)
       }
-
-      acc[key].valor_programacion += Number(item.valor_programacion) || 0
-      acc[key].valor_ejecucion += Number(item.valor_ejecucion) || 0
-      acc[key].registros.push(item)
-
-      return acc
-    }, {})
+    })
 
     return Object.values(groupedData).map((item: any) => ({
       ...item,
-      percentage: item.valor_programacion > 0 
-        ? parseFloat(((item.valor_ejecucion / item.valor_programacion) * 100).toFixed(2)) // SIN LÍMITE - mostrar valor real
+      percentage: item.valor_programacion > 0
+        ? parseFloat(((item.valor_ejecucion / item.valor_programacion) * 100).toFixed(2))
         : 0
     }))
   }
@@ -257,7 +263,7 @@ class KilometersService {
   private calculateSummary(data: KilometersData[]): KilometersSummary {
     const totalProgrammed = data.reduce((sum, item) => sum + item.valor_programacion, 0)
     const totalExecuted = data.reduce((sum, item) => sum + item.valor_ejecucion, 0)
-    const percentage = totalProgrammed > 0 
+    const percentage = totalProgrammed > 0
       ? parseFloat(((totalExecuted / totalProgrammed) * 100).toFixed(2)) // SIN LÍMITE - mostrar valor real
       : 0
 
@@ -281,7 +287,7 @@ class KilometersService {
   // Obtener meses disponibles para un usuario
   async getAvailableMonths(userCode: string, year?: number): Promise<number[]> {
     if (!year) return []
-    
+
     return dbHelpers.getAvailableMonths(
       'variables_control',
       'fecha_inicio_programacion',

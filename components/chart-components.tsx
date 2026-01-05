@@ -139,18 +139,20 @@ interface PropsTresAnios {
   data: any[]
   isLoading?: boolean
   currentYearPerformance?: number
+  referenceYear?: number
 }
 
 export const ThreeYearComparisonChart: React.FC<PropsTresAnios> = memo(({
   data,
   isLoading = false,
-  currentYearPerformance
+  currentYearPerformance,
+  referenceYear = ANIO_ACTUAL
 }) => {
   const datosProcessados = useMemo(() => {
     if (!data?.length) return { historico: [], actual: 0, todos: [] }
 
     const historico = data
-      .filter(item => item.year !== ANIO_ACTUAL)
+      .filter(item => item.year !== referenceYear)
       .map(item => ({
         year: item.year,
         rendimiento: item['rendimiento general (%)'] || 0
@@ -158,15 +160,15 @@ export const ThreeYearComparisonChart: React.FC<PropsTresAnios> = memo(({
       .sort((a, b) => a.year - b.year)
 
     const actual = currentYearPerformance ||
-      data.find(item => item.year === ANIO_ACTUAL)?.['rendimiento general (%)'] || 0
+      data.find(item => item.year === referenceYear)?.['rendimiento general (%)'] || 0
 
     const todos = [...historico]
     if (actual > 0) {
-      todos.push({ year: ANIO_ACTUAL, rendimiento: actual })
+      todos.push({ year: referenceYear, rendimiento: actual })
     }
 
     return { historico, actual, todos }
-  }, [data, currentYearPerformance])
+  }, [data, currentYearPerformance, referenceYear])
 
   if (isLoading) {
     return <EstadoCarga mensaje="Cargando análisis de rendimiento..." />
@@ -204,7 +206,7 @@ export const ThreeYearComparisonChart: React.FC<PropsTresAnios> = memo(({
                 {todos.map((entry, index) => (
                   <Cell
                     key={`cell-${index}`}
-                    fill={entry.year === ANIO_ACTUAL ? "#16a34a" : "#10b981"}
+                    fill={entry.year === referenceYear ? "#16a34a" : "#10b981"}
                   />
                 ))}
               </Bar>
@@ -243,12 +245,11 @@ export const ThreeYearComparisonChart: React.FC<PropsTresAnios> = memo(({
       {actual > 0 && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
           <div className="text-sm text-green-600 font-medium mb-1">Año Actual</div>
-          <div className="text-2xl font-bold text-gray-800">{ANIO_ACTUAL}</div>
+          <div className="text-2xl font-bold text-gray-800">{referenceYear}</div>
           <div className={`text-4xl font-bold ${obtenerCategoria(actual).color} my-2`}>
             {actual.toFixed(1)}%
           </div>
           <div className={`text-sm font-medium ${obtenerCategoria(actual).color}`}>
-
           </div>
         </div>
       )}
@@ -474,7 +475,7 @@ export const BonusMonthlyChart: React.FC<PropsMensual> = memo(({ data, year, isL
   const datosMensuales = useMemo(() => {
     if (!data?.length) return []
 
-    return MESES.slice(0, 10).map((mes, index) => { // Solo 10 meses como en el original
+    return MESES.map((mes, index) => { // Mostrar todos los meses disponibles
       const mesData = data.find(item =>
         item.month === index + 1 || item.monthNumber === index + 1
       )
