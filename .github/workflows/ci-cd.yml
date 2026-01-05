@@ -53,6 +53,22 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       
+      - name: Crear archivo .env
+        run: |
+          touch .env
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
+          echo "DB_MAX_CONNECTIONS=${{ secrets.DB_MAX_CONNECTIONS }}" >> .env
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+          echo "DB_TIMEOUT=${{ secrets.DB_TIMEOUT }}" >> .env
+          echo "DB_USER=${{ secrets.DB_USER }}" >> .env
+          echo "MSSQL_DATABASE=${{ secrets.MSSQL_DATABASE }}" >> .env
+          echo "MSSQL_PASSWORD=${{ secrets.MSSQL_PASSWORD }}" >> .env
+          echo "MSSQL_PORT=${{ secrets.MSSQL_PORT }}" >> .env
+          echo "MSSQL_SERVER=${{ secrets.MSSQL_SERVER }}" >> .env
+          echo "MSSQL_USER=${{ secrets.MSSQL_USER }}" >> .env
+          echo "NODE_ENV=production" >> .env
+      
       - name: Build Application
         run: pnpm run build
   
