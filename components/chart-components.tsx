@@ -155,12 +155,12 @@ export const ThreeYearComparisonChart: React.FC<PropsTresAnios> = memo(({
       .filter(item => item.year !== referenceYear)
       .map(item => ({
         year: item.year,
-        rendimiento: item['rendimiento general (%)'] || 0
+        rendimiento: item.rendimiento || 0
       }))
       .sort((a, b) => a.year - b.year)
 
     const actual = currentYearPerformance ||
-      data.find(item => item.year === referenceYear)?.['rendimiento general (%)'] || 0
+      data.find(item => item.year === referenceYear)?.rendimiento || 0
 
     const todos = [...historico]
     if (actual > 0) {

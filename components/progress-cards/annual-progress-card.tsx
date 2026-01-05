@@ -62,19 +62,21 @@ const TarjetaProgresoAnualBase: React.FC<PropsTarjetaProgresoAnual> = ({ userCod
 
     // Calcular rendimiento del año actual para la gráfica
     const performanceActual = useMemo(() => {
-        if (!hKmCurrent.data || !hBoCurrent.data) return undefined
+        const kmData = hKmCurrent.data
+        const boData = hBoCurrent.data
+        if (!kmData && !boData) return undefined
 
-        // Extraer listas
-        const kmList = hKmCurrent.data.data || hKmCurrent.data.monthlyData || []
-        const boList = hBoCurrent.data.monthlyBonusData || []
-
+        // Kilómetros
+        const kmList = kmData?.data || kmData?.monthlyData || []
         const tKmE = kmList.reduce((s: number, i: any) => s + Number(i.valor_ejecucion || 0), 0)
         const tKmP = kmList.reduce((s: number, i: any) => s + Number(i.valor_programacion || 0), 0)
-        const pKm = tKmP > 0 ? (tKmE / tKmP) * 100 : 0
+        const pKm = tKmP > 0 ? (tKmE / tKmP) * 100 : (kmData?.summary?.percentage ?? 0)
 
+        // Bonificaciones
+        const boList = boData?.monthlyBonusData || []
         const tBoBase = boList.reduce((s: number, i: any) => s + Number(i.bonusValue || 0), 0)
         const tBoFinal = boList.reduce((s: number, i: any) => s + Number(i.finalValue || 0), 0)
-        const pBo = tBoBase > 0 ? (tBoFinal / tBoBase) * 100 : (boList.length > 0 ? 100 : 0)
+        const pBo = tBoBase > 0 ? (tBoFinal / tBoBase) * 100 : (boData?.summary?.percentage ?? 100)
 
         return Number(((pKm + pBo) / 2).toFixed(1))
     }, [hKmCurrent.data, hBoCurrent.data])
@@ -82,26 +84,17 @@ const TarjetaProgresoAnualBase: React.FC<PropsTarjetaProgresoAnual> = ({ userCod
     // Procesar datos para la comparativa (años históricos)
     const datosComparativa = useMemo(() => {
         const calcularRendimiento = (kmResponse: any, boResponse: any) => {
-            if (!kmResponse || !boResponse) return 0
+            if (!kmResponse && !boResponse) return 0
 
-            // Extraer arrays de datos de forma segura
-            const kmList = kmResponse.data || kmResponse.monthlyData || []
-            const boList = boResponse.monthlyBonusData || [] // Bonos usa monthlyBonusData
-
-            // Si no hay listas, intentar usar summaries si están disponibles como fallback
-            if (kmList.length === 0 && kmResponse.summary) {
-                // Fallback a summary si no hay lista (raro pero posible)
-            }
-
-            // Calcular Kilómetros
+            const kmList = kmResponse?.data || kmResponse?.monthlyData || []
             const tKmE = kmList.reduce((s: number, i: any) => s + Number(i.valor_ejecucion || 0), 0)
             const tKmP = kmList.reduce((s: number, i: any) => s + Number(i.valor_programacion || 0), 0)
-            const pKm = tKmP > 0 ? (tKmE / tKmP) * 100 : 0
+            const pKm = tKmP > 0 ? (tKmE / tKmP) * 100 : (kmResponse?.summary?.percentage ?? 0)
 
-            // Calcular Bonos
+            const boList = boResponse?.monthlyBonusData || []
             const tBoBase = boList.reduce((s: number, i: any) => s + Number(i.bonusValue || 0), 0)
             const tBoFinal = boList.reduce((s: number, i: any) => s + Number(i.finalValue || 0), 0)
-            const pBo = tBoBase > 0 ? (tBoFinal / tBoBase) * 100 : (boList.length > 0 ? 100 : 0)
+            const pBo = tBoBase > 0 ? (tBoFinal / tBoBase) * 100 : (boResponse?.summary?.percentage ?? 100)
 
             return Number(((pKm + pBo) / 2).toFixed(1))
         }
@@ -117,7 +110,7 @@ const TarjetaProgresoAnualBase: React.FC<PropsTarjetaProgresoAnual> = ({ userCod
                 if (!year) return null
                 return {
                     year,
-                    'rendimiento general (%)': calcularRendimiento(km, bo)
+                    rendimiento: calcularRendimiento(km, bo)
                 }
             })
             .filter(Boolean)
@@ -125,27 +118,25 @@ const TarjetaProgresoAnualBase: React.FC<PropsTarjetaProgresoAnual> = ({ userCod
 
     // Datos para la sección de indicadores
     const indicadores = useMemo(() => {
-        if (!hKmSel.data || !hBoSel.data || !anioSeleccionado) return null
+        const kmData = hKmSel.data
+        const boData = hBoSel.data
+        if (!kmData && !boData || !anioSeleccionado) return null
 
-        // Extraer listas
-        const kmList = hKmSel.data.data || hKmSel.data.monthlyData || []
-        const boList = hBoSel.data.monthlyBonusData || []
-
-        // Calcular Kilómetros
+        const kmList = kmData?.data || kmData?.monthlyData || []
         const tKmE = kmList.reduce((s: number, i: any) => s + Number(i.valor_ejecucion || 0), 0)
         const tKmP = kmList.reduce((s: number, i: any) => s + Number(i.valor_programacion || 0), 0)
-        const pKm = tKmP > 0 ? (tKmE / tKmP) * 100 : 0
+        const pKm = tKmP > 0 ? (tKmE / tKmP) * 100 : (kmData?.summary?.percentage ?? 0)
 
-        // Calcular Bonos
+        const boList = boData?.monthlyBonusData || []
         const tBoBase = boList.reduce((s: number, i: any) => s + Number(i.bonusValue || 0), 0)
         const tBoFinal = boList.reduce((s: number, i: any) => s + Number(i.finalValue || 0), 0)
-        const pBo = tBoBase > 0 ? (tBoFinal / tBoBase) * 100 : (boList.length > 0 ? 100 : 0)
+        const pBo = tBoBase > 0 ? (tBoFinal / tBoBase) * 100 : (boData?.summary?.percentage ?? 100)
 
         return {
             combined: Number(((pKm + pBo) / 2).toFixed(1)),
-            km: Number(pKm.toFixed(1)),
-            bo: Number(pBo.toFixed(1)),
-            months: kmList.length
+            km: Number((pKm || 0).toFixed(1)),
+            bo: Number((pBo || 0).toFixed(1)),
+            months: kmList.length > 0 ? kmList.length : (boList.length || 0)
         }
     }, [hKmSel.data, hBoSel.data, anioSeleccionado])
 
@@ -189,10 +180,9 @@ const TarjetaProgresoAnualBase: React.FC<PropsTarjetaProgresoAnual> = ({ userCod
 
                 <div className="bg-gray-50/30 rounded-2xl p-2 border border-gray-100/50">
                     <ThreeYearComparisonChart
-                        data={datosComparativa as any}
-                        isLoading={false}
+                        data={datosComparativa}
+                        currentYearPerformance={performanceActual}
                         referenceYear={anioActualReal}
-                        currentYearPerformance={performanceActual} // Usar el calculado específicamente para la gráfica
                     />
                 </div>
 

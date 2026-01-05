@@ -147,13 +147,25 @@ class BonusesService {
       this.getBonusesByYear(params.userCode),
     ])
 
-    // Si estamos consultando un mes específico y no hay novedades, 
-    // significa que el bono del mes es completo
-    const isSpecificMonth = params.year && params.month
+    const isSpecificMonth = !!(params.year && params.month)
     const hasNoDeductions = novedades.length === 0
 
+    // Ajustar días de novedad al mes consultado si aplica
+    const novedadesAjustadas = isSpecificMonth ? novedades.map(n => {
+      const start = new Date(n.fecha_inicio_novedad)
+      const end = n.fecha_fin_novedad ? new Date(n.fecha_fin_novedad) : new Date()
+      const firstDay = new Date(params.year as number, (params.month as number) - 1, 1)
+      const lastDay = new Date(params.year as number, params.month as number, 0)
+
+      const overlapStart = start < firstDay ? firstDay : start
+      const overlapEnd = end > lastDay ? lastDay : end
+      const diff = Math.max(0, overlapEnd.getTime() - overlapStart.getTime())
+      const overlapDays = Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1
+      return { ...n, dias_novedad: overlapDays }
+    }) : novedades
+
     // Procesar deducciones
-    const deductions = this.processDeductions(novedades, baseBonus)
+    const deductions = this.processDeductions(novedadesAjustadas, baseBonus)
     const totalDeductionAmount = Math.min(
       deductions.reduce((sum, d) => sum + d.monto, 0),
       baseBonus
@@ -239,11 +251,21 @@ class BonusesService {
         const monthNovedades = allYearNovedades.filter(n => {
           const start = new Date(n.fecha_inicio_novedad)
           const end = n.fecha_fin_novedad ? new Date(n.fecha_fin_novedad) : new Date()
-
           return (start <= lastDayOfMonth && end >= firstDayOfMonth)
         })
 
-        const monthDeductions = this.processDeductions(monthNovedades, baseBonus)
+        // Ajustar días de novedad al periodo del mes
+        const monthNovedadesAjustadas = monthNovedades.map(n => {
+          const start = new Date(n.fecha_inicio_novedad)
+          const end = n.fecha_fin_novedad ? new Date(n.fecha_fin_novedad) : new Date()
+          const overlapStart = start < firstDayOfMonth ? firstDayOfMonth : start
+          const overlapEnd = end > lastDayOfMonth ? lastDayOfMonth : end
+          const diff = Math.max(0, overlapEnd.getTime() - overlapStart.getTime())
+          const overlapDays = Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1
+          return { ...n, dias_novedad: overlapDays }
+        })
+
+        const monthDeductions = this.processDeductions(monthNovedadesAjustadas, baseBonus)
         const monthDeductionAmount = Math.min(
           monthDeductions.reduce((sum, d) => sum + d.monto, 0),
           baseBonus

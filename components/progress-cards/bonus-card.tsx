@@ -43,14 +43,13 @@ const TarjetaBonificacionesBase: React.FC<PropsTarjetaBonificaciones> = ({ userC
     }, [data?.monthlyBonusData, anioSeleccionado])
 
     const totalesAnio = useMemo(() => {
-        if (!datosMensualesAnio.length || !anioSeleccionado) return { base: 0, final: 0, porcentaje: 0 }
-        const bonoBase = obtenerBonoBaseAnual(anioSeleccionado)
-        const totalBase = bonoBase * datosMensualesAnio.length
-        const totalFinal = datosMensualesAnio.reduce((sum: number, item: any) =>
-            sum + Number(item.finalValue || item.finalBonus || bonoBase), 0)
-        const porcentaje = totalBase > 0 ? Number(((totalFinal / totalBase) * 100).toFixed(2)) : 100
-        return { base: totalBase, final: totalFinal, porcentaje }
-    }, [datosMensualesAnio, anioSeleccionado])
+        if (!data?.summary) return { base: 0, final: 0, porcentaje: 0 }
+        return {
+            base: data.summary.totalProgrammed,
+            final: data.summary.totalExecuted,
+            porcentaje: data.summary.percentage
+        }
+    }, [data?.summary])
 
     const handleAnioChange = useCallback((v: string) => {
         setAnioSeleccionado(Number(v))

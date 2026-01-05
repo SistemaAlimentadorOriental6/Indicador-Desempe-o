@@ -44,12 +44,13 @@ const TarjetaKilometrosBase: React.FC<PropsTarjetaKilometros> = ({ userCode }) =
     }, [data?.monthlyData, anioSeleccionado])
 
     const totalesAnio = useMemo(() => {
-        if (!datosMensualesAnio.length) return { ejecutado: 0, programado: 0, porcentaje: 0 }
-        const ejecutado = datosMensualesAnio.reduce((sum: number, item: DatosMes) => sum + Number(item.valor_ejecucion || 0), 0)
-        const programado = datosMensualesAnio.reduce((sum: number, item: DatosMes) => sum + Number(item.valor_programacion || 0), 0)
-        const porcentaje = programado > 0 ? Number(((ejecutado / programado) * 100).toFixed(2)) : 0
-        return { ejecutado, programado, porcentaje }
-    }, [datosMensualesAnio])
+        if (!data?.summary) return { ejecutado: 0, programado: 0, porcentaje: 0 }
+        return {
+            ejecutado: data.summary.totalExecuted,
+            programado: data.summary.totalProgrammed,
+            porcentaje: data.summary.percentage
+        }
+    }, [data?.summary])
 
     const handleAnioChange = useCallback((v: string) => {
         setAnioSeleccionado(Number(v))
