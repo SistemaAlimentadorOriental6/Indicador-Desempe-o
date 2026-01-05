@@ -37,11 +37,13 @@ const TarjetaKilometrosBase: React.FC<PropsTarjetaKilometros> = ({ userCode }) =
     }, [aniosDisponibles, anioSeleccionado])
 
     const datosMensualesAnio = useMemo(() => {
-        if (!data?.monthlyData || !anioSeleccionado) return []
-        return data.monthlyData
+        // El servicio devuelve 'data' no 'monthlyData'
+        const items = data?.data || data?.monthlyData || []
+        if (!items.length || !anioSeleccionado) return []
+        return items
             .filter((item: DatosMes) => item.year === anioSeleccionado)
             .sort((a: DatosMes, b: DatosMes) => a.month - b.month)
-    }, [data?.monthlyData, anioSeleccionado])
+    }, [data?.data, data?.monthlyData, anioSeleccionado])
 
     const totalesAnio = useMemo(() => {
         if (!data?.summary) return { ejecutado: 0, programado: 0, porcentaje: 0 }

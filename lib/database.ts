@@ -183,14 +183,16 @@ export const dbHelpers = {
   },
   async getAvailableMonths(table: string, dateColumn: string, whereClause?: string, params: any[] = []): Promise<number[]> {
     const db = getDatabase()
+    // Usar SUBSTRING para extraer el mes del string de fecha (YYYY-MM-DD)
+    // Esto evita problemas de zona horaria que ocurren con MONTH()
     const query = `
-      SELECT DISTINCT MONTH(${dateColumn}) as month 
+      SELECT DISTINCT CAST(SUBSTRING(${dateColumn}, 6, 2) AS UNSIGNED) as month 
       FROM ${table}
       ${whereClause ? `WHERE ${whereClause}` : ''}
       ORDER BY month ASC
     `
     const result = await db.executeQuery<Array<{ month: number }>>(query, params)
-    return result.map(r => r.month).filter(m => m !== null)
+    return result.map(r => r.month).filter(m => m !== null && m >= 1 && m <= 12)
   }
 }
 

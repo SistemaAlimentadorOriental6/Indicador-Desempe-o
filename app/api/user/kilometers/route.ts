@@ -68,6 +68,7 @@ async function handleGet(request: Request) {
   if (!result.data || result.data.length === 0) {
     return apiResponse.success({
       data: [],
+      monthlyData: [],
       summary: { totalProgrammed: 0, totalExecuted: 0, percentage: 0 },
       availableYears: result.availableYears,
       availableMonths: result.availableMonths,
@@ -79,8 +80,10 @@ async function handleGet(request: Request) {
   }
 
   // Respuesta exitosa con datos formateados
+  const formattedData = formatearDatos(result.data)
   return apiResponse.success({
-    data: formatearDatos(result.data),
+    data: formattedData,
+    monthlyData: formattedData, // Alias para compatibilidad
     summary: {
       totalProgrammed: Number(result.summary.totalProgrammed.toFixed(2)),
       totalExecuted: Number(result.summary.totalExecuted.toFixed(2)),

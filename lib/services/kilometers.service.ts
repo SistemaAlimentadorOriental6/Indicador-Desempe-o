@@ -19,6 +19,7 @@ export interface KilometersSummary {
 
 export interface KilometersResponse {
   data: KilometersData[]
+  monthlyData?: KilometersData[] // Alias para compatibilidad
   summary: KilometersSummary
   availableYears: number[]
   availableMonths: number[]
@@ -44,8 +45,8 @@ class KilometersService {
     year?: number
     month?: number
   }): Promise<KilometersResponse> {
-    // Generar clave de caché
-    const cacheKey = this.cache.getUserDataKey(params.userCode, 'kilometers', {
+    // Generar clave de caché (v3 para invalidar cachés antiguas con bugs de fecha)
+    const cacheKey = this.cache.getUserDataKey(params.userCode, 'kilometers-v3', {
       year: params.year || 'all',
       month: params.month || 'all',
     })
@@ -97,8 +98,9 @@ class KilometersService {
         codigo_empleado,
         valor_programacion,
         valor_ejecucion,
-        fecha_inicio_programacion,
-        fecha_fin_programacion
+        fecha_fin_programacion,
+        CAST(SUBSTRING(fecha_inicio_programacion, 1, 4) AS UNSIGNED) as db_year,
+        CAST(SUBSTRING(fecha_inicio_programacion, 6, 2) AS UNSIGNED) as db_month
       FROM variables_control
       WHERE codigo_variable = 'KMS'
       AND codigo_empleado = ?
@@ -124,21 +126,14 @@ class KilometersService {
     // Procesar datos
     let processedData = this.processKilometersData(rawData, params.year, params.month)
 
-    // Filtrar para mostrar solo meses que realmente existen en el sistema para ese año
-    if (params.year && !params.month && months.length > 0) {
-      processedData = processedData.filter(d => months.includes(d.month))
-    }
+    // Ordenar por mes para asegurar orden correcto
+    processedData = processedData.sort((a, b) => a.month - b.month)
 
-    // Si es el año actual, limitamos por seguridad al mes presente
-    const hoy = new Date()
-    if (params.year === hoy.getFullYear() && !params.month) {
-      const mesActual = hoy.getMonth() + 1
-      processedData = processedData.filter(d => d.month <= mesActual)
-    }
     const summary = this.calculateSummary(processedData)
 
     return {
       data: processedData,
+      monthlyData: processedData, // Alias para compatibilidad
       summary,
       availableYears: years,
       availableMonths: months,
@@ -206,48 +201,39 @@ class KilometersService {
     }
   }
 
-  // Procesar datos de kilómetros expandiendo rangos de fechas
+  // Procesar datos de kilómetros - CADA REGISTRO ES UN MES ÚNICO
   private processKilometersData(rawData: any[], filterYear?: number, filterMonth?: number): KilometersData[] {
     const groupedData: Record<string, any> = {}
 
     rawData.forEach((item) => {
-      const start = new Date(item.fecha_inicio_programacion)
-      const end = item.fecha_fin_programacion ? new Date(item.fecha_fin_programacion) : new Date()
+      // Usar directamente los valores calculados por la base de datos
+      const year = item.db_year
+      const month = item.db_month
 
-      // Normalizar fechas al primer día del mes para facilitar iteración
-      let currentIter = new Date(start.getFullYear(), start.getMonth(), 1)
-      const lastMonthDate = new Date(end.getFullYear(), end.getMonth(), 1)
+      console.log(`Procesando: ${item.fecha_inicio_programacion} -> ${year}-${month} (Raw: ${item.db_year}-${item.db_month})`)
 
-      while (currentIter <= lastMonthDate) {
-        const year = currentIter.getFullYear()
-        const month = currentIter.getMonth() + 1
+      // Verificar si este mes debe ser incluido según filtros
+      const matchYear = !filterYear || year === filterYear
+      const matchMonth = !filterMonth || month === filterMonth
 
-        // Verificar si este mes debe ser incluido según filtros
-        const matchYear = !filterYear || year === filterYear
-        const matchMonth = !filterMonth || month === filterMonth
+      if (matchYear && matchMonth) {
+        const key = `${year}-${String(month).padStart(2, "0")}`
 
-        if (matchYear && matchMonth) {
-          const key = `${year}-${String(month).padStart(2, "0")}`
-
-          if (!groupedData[key]) {
-            groupedData[key] = {
-              year,
-              month,
-              monthName: this.getMonthName(month),
-              valor_programacion: 0,
-              valor_ejecucion: 0,
-              registros: [],
-            }
+        if (!groupedData[key]) {
+          groupedData[key] = {
+            year,
+            month,
+            monthName: this.getMonthName(month),
+            valor_programacion: 0,
+            valor_ejecucion: 0,
+            registros: [],
           }
-
-          // Sumar valores
-          groupedData[key].valor_programacion += Number(item.valor_programacion) || 0
-          groupedData[key].valor_ejecucion += Number(item.valor_ejecucion) || 0
-          groupedData[key].registros.push(item)
         }
 
-        // Avanzar al siguiente mes
-        currentIter.setMonth(currentIter.getMonth() + 1)
+        // Sumar valores del registro a su mes correspondiente
+        groupedData[key].valor_programacion += Number(item.valor_programacion) || 0
+        groupedData[key].valor_ejecucion += Number(item.valor_ejecucion) || 0
+        groupedData[key].registros.push(item)
       }
     })
 
@@ -256,7 +242,11 @@ class KilometersService {
       percentage: item.valor_programacion > 0
         ? parseFloat(((item.valor_ejecucion / item.valor_programacion) * 100).toFixed(2))
         : 0
-    }))
+    })).sort((a, b) => {
+      // Ordenar por año y mes
+      if (a.year !== b.year) return a.year - b.year
+      return a.month - b.month
+    })
   }
 
   // Calcular resumen
