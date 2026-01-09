@@ -10,8 +10,8 @@ export const LoginHero = () => {
     return (
         <div className="lg:order-2 w-full lg:w-1/2 relative min-h-[45vh] lg:min-h-screen overflow-hidden bg-gray-800">
             <Image
-                src="/busrunner.webp"
-                alt="Bus SAO6"
+                src="/buselectricosao6.jpg"
+                alt="Bus Eléctrico SAO6"
                 fill
                 className={`object-cover transition-opacity duration-500 ${imageLoaded ? "opacity-100" : "opacity-0"}`}
                 priority

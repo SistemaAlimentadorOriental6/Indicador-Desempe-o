@@ -45,6 +45,15 @@ interface BonusResponse {
     deductions: Deduction[]
     availableYears: number[]
     availableMonths: number[]
+    monthlyBonusData?: any[]
+    lastMonthData?: {
+        year: number
+        month: number
+        monthName: string
+        bonusValue: number
+        deductionAmount: number
+        finalValue: number
+    }
 }
 
 interface FaultRecord {
@@ -139,6 +148,7 @@ export default function BonusDetailsTab({ userCode }: BonusDetailsTabProps) {
     const [modalDetalle, setModalDetalle] = useState<{ codigo: string; descripcion: string; year?: number } | null>(null)
     const [detallesFalta, setDetallesFalta] = useState<any[]>([])
     const [cargandoDetalle, setCargandoDetalle] = useState(false)
+    const [seHaAutoseleccionado, setSeHaAutoseleccionado] = useState(false)
 
     // Función para cargar detalle de una falta
     const cargarDetalleFalta = async (codigo: string, descripcion: string, year?: number) => {
@@ -160,14 +170,12 @@ export default function BonusDetailsTab({ userCode }: BonusDetailsTabProps) {
         }
     }
 
-    // Inicializar con fecha actual
+    // Reiniciamos la autoselección cuando el userCode cambia
     useEffect(() => {
-        const hoy = new Date()
-        if (!añoSeleccionado && !mesSeleccionado) {
-            setAñoSeleccionado(hoy.getFullYear())
-            setMesSeleccionado(hoy.getMonth() + 1)
-        }
-    }, [])
+        setSeHaAutoseleccionado(false)
+        setAñoSeleccionado(null)
+        setMesSeleccionado(null)
+    }, [userCode])
 
     // Cargar datos de bonos
     useEffect(() => {
@@ -190,6 +198,24 @@ export default function BonusDetailsTab({ userCode }: BonusDetailsTabProps) {
                 })
                 setAñosDisponibles(payload.availableYears || [])
                 setMesesDisponibles(payload.availableMonths || [])
+
+                // Autoselección del último periodo con datos
+                if (!seHaAutoseleccionado && !añoSeleccionado && !mesSeleccionado) {
+                    if (payload.lastMonthData) {
+                        // El gráfico usa el último año con datos para no estar vacío
+                        setAñoGrafica(payload.lastMonthData.year)
+
+                        // Los filtros generales por defecto muestran "Todos los años" y "Todos los meses"
+                        setAñoSeleccionado(null)
+                        setMesSeleccionado(null)
+                        setSeHaAutoseleccionado(true)
+                    } else if (payload.availableYears?.length > 0) {
+                        setAñoGrafica(payload.availableYears[0])
+                        setAñoSeleccionado(null)
+                        setMesSeleccionado(null)
+                        setSeHaAutoseleccionado(true)
+                    }
+                }
             } catch (err: any) {
                 setError(err.message ?? "Error desconocido")
             } finally {
@@ -225,32 +251,26 @@ export default function BonusDetailsTab({ userCode }: BonusDetailsTabProps) {
             setCargandoRendimiento(true)
 
             try {
-                const meses = Array.from({ length: 12 }, (_, i) => i + 1)
-                const datos: MonthlyPerformance[] = []
+                // Hacemos una única petición para el año para obtener todos sus meses con datos
+                const res = await fetch(`/api/user/bonuses?codigo=${userCode}&year=${añoGrafica}`)
+                if (res.ok) {
+                    const json = await res.json()
+                    const payload = json?.data ?? json
+                    const mesesData = payload.monthlyBonusData || []
 
-                for (const mes of meses) {
-                    try {
-                        const res = await fetch(`/api/user/bonuses?codigo=${userCode}&year=${añoGrafica}&month=${mes}`)
-                        if (res.ok) {
-                            const json = await res.json()
-                            const payload = json?.data ?? json
-                            if (payload.baseBonus && payload.baseBonus > 0) {
-                                datos.push({
-                                    month: obtenerNombreMes(mes).substring(0, 3),
-                                    monthNumber: mes,
-                                    percentage: Math.round((payload.finalBonus / payload.baseBonus) * 1000) / 10,
-                                    baseBonus: payload.baseBonus,
-                                    finalBonus: payload.finalBonus,
-                                    deductionAmount: payload.deductionAmount || 0,
-                                })
-                            }
-                        }
-                    } catch {
-                        // Skip
-                    }
+                    const datos: MonthlyPerformance[] = mesesData.map((m: any) => ({
+                        month: obtenerNombreMes(m.month).substring(0, 3),
+                        monthNumber: m.month,
+                        percentage: m.bonusValue > 0 ? Math.round((m.finalValue / m.bonusValue) * 1000) / 10 : 0,
+                        baseBonus: m.bonusValue,
+                        finalBonus: m.finalValue,
+                        deductionAmount: m.deductionAmount || 0,
+                    }))
+
+                    setRendimientoMensual(datos)
+                } else {
+                    setRendimientoMensual([])
                 }
-
-                setRendimientoMensual(datos.sort((a, b) => a.monthNumber - b.monthNumber))
             } catch {
                 setRendimientoMensual([])
             } finally {

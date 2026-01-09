@@ -223,27 +223,30 @@ class BonusesService {
 
       monthlyBonusData = []
 
-      // Consultar meses disponibles en KMS para este año para marcar el límite real
-      const kmsMonthsQuery = `
+      // Consultar meses con actividad real (KMS o novedades)
+      const activityQuery = `
         SELECT DISTINCT MONTH(fecha_inicio_programacion) as month
         FROM variables_control
         WHERE codigo_empleado = ? AND YEAR(fecha_inicio_programacion) = ?
           AND codigo_variable = 'KMS'
+        UNION
+        SELECT DISTINCT MONTH(fecha_inicio_novedad) as month
+        FROM novedades
+        WHERE codigo_empleado = ? AND YEAR(fecha_inicio_novedad) = ?
       `
-      const kmsResult = await this.db.executeQuery<any[]>(kmsMonthsQuery, [params.userCode, params.year])
-      const kmsMonths = kmsResult.map(r => r.month)
+      const activityResult = await this.db.executeQuery<any[]>(activityQuery, [
+        params.userCode, params.year, params.userCode, params.year
+      ])
+      const activeMonths = activityResult.map(r => r.month).sort((a, b) => a - b)
 
       const hoy = new Date()
       const esAnioActual = params.year === hoy.getFullYear()
       const mesActualSist = hoy.getMonth() + 1
 
-      // El límite es el mes más alto de KMS (datos reales)
-      let limitMonth = kmsMonths.length > 0 ? Math.max(...kmsMonths) : (esAnioActual ? mesActualSist : 12)
+      for (const month of activeMonths) {
+        // En el año actual, no mostrar meses futuros aunque haya programación
+        if (esAnioActual && month > mesActualSist) continue
 
-      // Protección: En el año actual no mostramos futuro, y en años pasados si no hay NADA de KMS asumimos 12
-      if (esAnioActual) limitMonth = Math.min(limitMonth, mesActualSist)
-
-      for (let month = 1; month <= limitMonth; month++) {
         // Filtrar novedades para este mes específico en memoria
         const firstDayOfMonth = new Date(params.year, month - 1, 1)
         const lastDayOfMonth = new Date(params.year, month, 0)
@@ -540,38 +543,26 @@ class BonusesService {
       const targetYear = year || new Date().getFullYear()
 
       const query = `
-        SELECT DISTINCT MONTH(fecha_inicio_novedad) as month
-        FROM novedades
-        WHERE codigo_empleado = ?
-        AND YEAR(fecha_inicio_novedad) = ?
+        SELECT DISTINCT month FROM (
+          SELECT DISTINCT MONTH(fecha_inicio_novedad) as month
+          FROM novedades
+          WHERE codigo_empleado = ? AND YEAR(fecha_inicio_novedad) = ?
+          UNION
+          SELECT DISTINCT MONTH(fecha_inicio_programacion) as month
+          FROM variables_control
+          WHERE codigo_empleado = ? AND YEAR(fecha_inicio_programacion) = ?
+          AND codigo_variable = 'KMS'
+        ) as combined_months
         ORDER BY month ASC
       `
 
-      const result = await this.db.executeQuery<Array<{ month: number }>>(query, [userCode, targetYear])
+      const result = await this.db.executeQuery<Array<{ month: number }>>(query, [
+        userCode, targetYear, userCode, targetYear
+      ])
       const months = result.map(r => r.month).filter(m => m !== null && m !== undefined)
 
-      // Si hay meses en la base de datos, devolverlos
-      if (months.length > 0) {
-        return months
-      }
-
-      // Si no hay meses en la base de datos para el año especificado,
-      // devolver todos los meses hasta el mes actual si es el año actual,
-      // o todos los meses si es un año anterior
-      const currentDate = new Date()
-      const currentYear = currentDate.getFullYear()
-      const currentMonth = currentDate.getMonth() + 1
-
-      if (targetYear === currentYear) {
-        // Para el año actual, devolver meses hasta el mes actual
-        return Array.from({ length: currentMonth }, (_, i) => i + 1)
-      } else if (targetYear < currentYear) {
-        // Para años anteriores, devolver todos los meses
-        return Array.from({ length: 12 }, (_, i) => i + 1)
-      } else {
-        // Para años futuros, devolver array vacío
-        return []
-      }
+      // Solo devolver los meses que tienen actividad real
+      return months
     } catch (error) {
       console.error('Error getting available months:', error)
       return []
